@@ -1,0 +1,60 @@
+#leakscanner-badge-container {
+  animation: slideInRight 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#leakscanner-badge {
+  position: relative;
+}
+
+#leakscanner-collapse-btn {
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+#leakscanner-badge:hover #leakscanner-collapse-btn {
+  opacity: 1;
+}
+
+#leakscanner-collapse-btn:hover {
+  background: rgba(255, 255, 255, 0.25) !important;
+  transform: scale(1.1);
+}
+
+#leakscanner-collapse-tab {
+  animation: slideInTab 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#leakscanner-badge-container {
+  /* Allow badge to be partially visible when collapsed */
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideInTab {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
