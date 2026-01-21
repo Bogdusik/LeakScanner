@@ -146,8 +146,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
             </label>
             <button
               onClick={() => {
-                // Snyk API tokens are created in account settings
-                chrome.tabs.create({ url: 'https://app.snyk.io/account' });
+                // Snyk API tokens are created in user settings
+                chrome.tabs.create({ url: 'https://app.snyk.io/manage/api-tokens' });
               }}
               className="flex items-center gap-1 text-xs text-rog-cyan hover:text-rog-cyanDark font-medium transition-colors"
             >
