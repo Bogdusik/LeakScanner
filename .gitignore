@@ -1,0 +1,33 @@
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Dependencies
+node_modules/
+target/
+dist/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build
+build/
+out/
+
+# Docker
+*.pid
+*.seed
+*.pid.lock
