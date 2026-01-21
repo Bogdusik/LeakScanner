@@ -33,6 +33,6 @@ public class OutdatedDependency {
     private DependencyType type;
     
     public enum DependencyType {
-        NPM, MAVEN, GRADLE, PIP, OTHER
+        NPM, MAVEN, GRADLE, PYTHON, PIP, OTHER
     }
 }
