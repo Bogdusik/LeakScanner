@@ -302,7 +302,7 @@ MIT License
 
 ## 👤 Author
 
-Built with modern technologies and best practices.
+Bohdan.
 
 ---
 
