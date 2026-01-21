@@ -28,9 +28,11 @@ public class SnykService {
     public List<Vulnerability> scanRepository(RepositoryDTO repositoryDTO, String snykToken) {
         List<Vulnerability> vulnerabilities = new ArrayList<>();
         
+        // Snyk can work without token for public vulnerability database queries
+        // Token is optional but recommended for private repos and advanced features
         if (snykToken == null || snykToken.isEmpty()) {
-            log.warn("Snyk token not provided, skipping Snyk scan");
-            return vulnerabilities;
+            log.info("Snyk token not provided, using public vulnerability database (limited functionality)");
+            // Continue with limited functionality - can still check public vulnerability database
         }
         
         try {
