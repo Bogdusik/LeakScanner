@@ -177,7 +177,6 @@ public class NpmAuditService {
             WebClient webClient = webClientBuilder.baseUrl("https://api.github.com").build();
             
             // Search GitHub Security Advisories
-            String query = String.format("package:%s type:reviewed", packageName);
             Map<String, Object> response = webClient.get()
                     .uri(uriBuilder -> uriBuilder
                             .path("/advisories")
