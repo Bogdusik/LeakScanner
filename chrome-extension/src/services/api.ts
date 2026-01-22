@@ -81,7 +81,7 @@ export const scanRepositoryStream = async (
           let finalResult: ScanResult | null = null;
           let accumulatedResult: Partial<ScanResult> | null = null;
           
-            // Set timeout to prevent hanging (90 seconds)
+            // Set timeout to prevent hanging (120 seconds to match backend)
           const timeoutId = setTimeout(() => {
             reader.cancel().catch(() => {});
             if (finalResult) {
