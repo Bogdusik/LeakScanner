@@ -191,8 +191,24 @@ export const scanRepositoryStream = async (
                       }
                       // Cancel reader to close connection immediately
                       reader.cancel().catch(() => {});
-                      // Resolve with finalResult
-                      resolve(finalResult || {} as ScanResult);
+                      // Resolve with finalResult - ensure it's valid
+                      if (finalResult) {
+                        resolve(finalResult);
+                      } else if (accumulatedResult) {
+                        // Fallback to accumulated result if finalResult is missing
+                        resolve({
+                          repository: repository,
+                          secrets: accumulatedResult.secrets || [],
+                          vulnerabilities: accumulatedResult.vulnerabilities || [],
+                          outdatedDependencies: accumulatedResult.outdatedDependencies || [],
+                          securityScore: accumulatedResult.securityScore || 100,
+                          lastScanned: new Date().toISOString(),
+                          error: undefined,
+                        } as ScanResult);
+                      } else {
+                        // No result at all - reject
+                        reject(new Error('Scan completed but no result data received'));
+                      }
                       return;
                     } else if (data.type === 'error') {
                       clearTimeout(timeoutId);
@@ -208,10 +224,17 @@ export const scanRepositoryStream = async (
             }
           } catch (error: any) {
             clearTimeout(timeoutId);
-            // If error is not cancellation, reject
+            // Always try to use finalResult first if available
+            if (finalResult) {
+              console.log('Error occurred but finalResult is available, using it');
+              resolve(finalResult);
+              return;
+            }
+            
+            // If error is not cancellation, try to use accumulated result
             if (error.name !== 'AbortError' && error.message !== 'The operation was aborted') {
               // Try to use accumulated result before rejecting
-              if (accumulatedResult && !finalResult) {
+              if (accumulatedResult) {
                 console.warn('Error occurred but using accumulated data:', error);
                 resolve({
                   repository: repository,
@@ -222,24 +245,27 @@ export const scanRepositoryStream = async (
                   lastScanned: new Date().toISOString(),
                   error: undefined,
                 } as ScanResult);
-              } else if (finalResult) {
-                resolve(finalResult);
-              } else {
-                reject(error);
+                return;
               }
-            } else if (finalResult) {
-              // If cancelled but we have result, resolve with it
-              resolve(finalResult);
-            } else if (accumulatedResult) {
-              resolve({
-                repository: repository,
-                secrets: accumulatedResult.secrets || [],
-                vulnerabilities: accumulatedResult.vulnerabilities || [],
-                outdatedDependencies: accumulatedResult.outdatedDependencies || [],
-                securityScore: accumulatedResult.securityScore || 100,
-                lastScanned: new Date().toISOString(),
-                error: undefined,
-              } as ScanResult);
+              // No accumulated data - reject with error
+              reject(error);
+            } else {
+              // Cancelled - try to use accumulated result if available
+              if (accumulatedResult) {
+                console.log('Operation cancelled but using accumulated data');
+                resolve({
+                  repository: repository,
+                  secrets: accumulatedResult.secrets || [],
+                  vulnerabilities: accumulatedResult.vulnerabilities || [],
+                  outdatedDependencies: accumulatedResult.outdatedDependencies || [],
+                  securityScore: accumulatedResult.securityScore || 100,
+                  lastScanned: new Date().toISOString(),
+                  error: undefined,
+                } as ScanResult);
+              } else {
+                // Cancelled with no data - reject
+                reject(new Error('Scan was cancelled'));
+              }
             }
           }
         };
