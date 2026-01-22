@@ -2,17 +2,17 @@ package com.leakscanner.service;
 
 import com.leakscanner.dto.RepositoryDTO;
 import com.leakscanner.model.SecretLeak;
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.regex.Matcher;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -21,10 +21,26 @@ import java.util.stream.Collectors;
 @Slf4j
 public class SecretScannerService {
     
-    private final WebClient.Builder webClientBuilder;
     private final GitHubService githubService;
     private final GitLabService gitLabService;
     private final ExecutorService executorService = Executors.newFixedThreadPool(8);
+    
+    @PreDestroy
+    public void shutdown() {
+        log.info("Shutting down SecretScannerService executor service");
+        executorService.shutdown();
+        try {
+            if (!executorService.awaitTermination(60, TimeUnit.SECONDS)) {
+                executorService.shutdownNow();
+                if (!executorService.awaitTermination(60, TimeUnit.SECONDS)) {
+                    log.warn("Executor service did not terminate");
+                }
+            }
+        } catch (InterruptedException e) {
+            executorService.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
     
     // Common secret patterns - improved with better regex
     private static final List<SecretPattern> SECRET_PATTERNS = List.of(
@@ -77,12 +93,26 @@ public class SecretScannerService {
                     ))
                     .collect(Collectors.toList());
             
-            // Collect all results
+            // Collect all results with timeout (limit to prevent hanging)
+            int maxFilesToScan = 50; // Reduced limit to prevent hanging
+            int scannedCount = 0;
+            
             for (CompletableFuture<List<SecretLeak>> future : futures) {
+                if (scannedCount >= maxFilesToScan) {
+                    log.warn("Reached file scan limit ({}), cancelling remaining scans", maxFilesToScan);
+                    future.cancel(true);
+                    continue;
+                }
+                
                 try {
-                    secrets.addAll(future.get());
+                    secrets.addAll(future.get(10, TimeUnit.SECONDS)); // Reduced timeout per file
+                    scannedCount++;
+                } catch (java.util.concurrent.TimeoutException e) {
+                    log.warn("File scan timeout, skipping", e);
+                    future.cancel(true);
                 } catch (Exception e) {
                     log.warn("Error scanning file for secrets", e);
+                    future.cancel(true);
                 }
             }
             
@@ -121,6 +151,13 @@ public class SecretScannerService {
             return secrets;
         }
         
+        // Validate file size (10MB limit)
+        long maxFileSize = 10 * 1024 * 1024; // 10MB
+        if (content.length() > maxFileSize) {
+            log.warn("File too large to scan: {} ({} bytes). Skipping.", file.path(), content.length());
+            return secrets;
+        }
+        
         // Skip common false positive patterns
         if (isFalsePositive(content, file.path())) {
             return secrets;
@@ -129,7 +166,6 @@ public class SecretScannerService {
         String[] lines = content.split("\n");
         
         for (SecretPattern pattern : SECRET_PATTERNS) {
-            Matcher matcher = pattern.pattern.matcher(content);
             int lineNumber = 1;
             
             for (String line : lines) {
