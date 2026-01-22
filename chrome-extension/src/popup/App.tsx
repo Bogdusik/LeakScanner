@@ -134,15 +134,33 @@ const App: React.FC = () => {
             // Immediately update to 100% and show final result
             console.log('Received complete event, updating UI to 100%');
             setScanProgress({ percent: 100, status: 'Completed', estimatedTimeRemaining: undefined });
-            if (progress.finalResult) {
+            if (progress.finalResult && progress.finalResult.repository) {
+              // Validate finalResult has required fields
               setScanResult(progress.finalResult);
               currentResult = progress.finalResult;
               // Cache immediately
               const cacheKey = `${currentRepo.platform}:${currentRepo.owner}/${currentRepo.name}`;
               chrome.storage.local.set({ [cacheKey]: progress.finalResult }).catch(console.error);
-            } else {
-              // If no finalResult, use accumulated result
+            } else if (currentResult && currentResult.repository) {
+              // If no finalResult, use accumulated result (but validate it has repository)
               setScanResult(currentResult);
+              const cacheKey = `${currentRepo.platform}:${currentRepo.owner}/${currentRepo.name}`;
+              chrome.storage.local.set({ [cacheKey]: currentResult }).catch(console.error);
+            } else {
+              // Fallback: create minimal valid result
+              const fallbackResult: ScanResult = {
+                repository: currentRepo,
+                secrets: currentResult?.secrets || [],
+                vulnerabilities: currentResult?.vulnerabilities || [],
+                outdatedDependencies: currentResult?.outdatedDependencies || [],
+                securityScore: currentResult?.securityScore || 100,
+                lastScanned: new Date().toISOString(),
+                error: undefined,
+              };
+              setScanResult(fallbackResult);
+              currentResult = fallbackResult;
+              const cacheKey = `${currentRepo.platform}:${currentRepo.owner}/${currentRepo.name}`;
+              chrome.storage.local.set({ [cacheKey]: fallbackResult }).catch(console.error);
             }
             // Stop progress timer immediately
             stopProgress(true);
@@ -220,17 +238,30 @@ const App: React.FC = () => {
       // Ensure progress reaches 100% and result is set when promise resolves
       // (This is a safety net - should already be set by complete event handler)
       // But we ensure it's set here in case the event handler didn't fire
-      if (result) {
+      if (result && result.repository) {
+        // Only update if result is valid (has repository property)
         setScanProgress({ percent: 100, status: 'Completed', estimatedTimeRemaining: undefined });
         setScanResult(result);
         scanCompleted = true;
+        
+        // Cache result immediately so it's available even if user closes extension
+        const cacheKey = `${currentRepo.platform}:${currentRepo.owner}/${currentRepo.name}`;
+        await chrome.storage.local.set({ [cacheKey]: result });
+        console.log('Scan completed and cached:', cacheKey);
+      } else {
+        // Result is invalid or missing - this shouldn't happen, but handle gracefully
+        console.warn('Scan completed but result is invalid:', result);
+        if (!scanCompleted) {
+          // If we haven't completed yet, try to use currentResult
+          if (currentResult && currentResult.repository) {
+            setScanProgress({ percent: 100, status: 'Completed', estimatedTimeRemaining: undefined });
+            setScanResult(currentResult);
+            scanCompleted = true;
+            const cacheKey = `${currentRepo.platform}:${currentRepo.owner}/${currentRepo.name}`;
+            await chrome.storage.local.set({ [cacheKey]: currentResult });
+          }
+        }
       }
-      
-      // Cache result immediately so it's available even if user closes extension
-      const cacheKey = `${currentRepo.platform}:${currentRepo.owner}/${currentRepo.name}`;
-      await chrome.storage.local.set({ [cacheKey]: result });
-      
-      console.log('Scan completed and cached:', cacheKey);
     } catch (error: any) {
       console.error('Scan error:', error);
       
