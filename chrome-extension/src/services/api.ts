@@ -106,36 +106,13 @@ export const scanRepositoryStream = async (
             while (true) {
               const { done, value } = await reader.read();
               
-              if (done) {
-                clearTimeout(timeoutId);
-                // Stream ended - try to use final result or accumulated data
-                if (finalResult) {
-                  console.log('Stream ended with final result');
-                  resolve(finalResult);
-                } else if (accumulatedResult) {
-                  // Use accumulated result if we have partial data
-                  console.warn('Stream ended without complete event, using accumulated data');
-                  const accumulatedScanResult = {
-                    repository: repository,
-                    secrets: accumulatedResult.secrets || [],
-                    vulnerabilities: accumulatedResult.vulnerabilities || [],
-                    outdatedDependencies: accumulatedResult.outdatedDependencies || [],
-                    securityScore: accumulatedResult.securityScore || 100,
-                    lastScanned: new Date().toISOString(),
-                    error: undefined,
-                  } as ScanResult;
-                  // Resolve with accumulated result - this will be handled by frontend
-                  resolve(accumulatedScanResult);
-                } else {
-                  // No data at all - this is a real error
-                  reject(new Error('Stream ended without complete event or any data'));
-                }
-                break;
+              // Add any remaining data to buffer
+              if (value) {
+                buffer += decoder.decode(value, { stream: !done });
               }
               
-              buffer += decoder.decode(value, { stream: true });
-              
-              // Process complete SSE events (separated by \n\n)
+              // CRITICAL: Process buffer completely before checking if done
+              // This ensures complete event in buffer is processed even if stream closed
               let eventEnd;
               while ((eventEnd = buffer.indexOf('\n\n')) !== -1) {
                 const event = buffer.substring(0, eventEnd);
@@ -145,17 +122,24 @@ export const scanRepositoryStream = async (
                 
                 // Parse SSE format: event: type\ndata: {...}
                 let dataStr = '';
+                let eventType = '';
                 
                 for (const line of event.split('\n')) {
                   if (line.startsWith('data: ')) {
                     dataStr = line.substring(6).trim();
-                    break; // Found data, no need to continue
+                  } else if (line.startsWith('event: ')) {
+                    eventType = line.substring(7).trim();
                   }
                 }
                 
                 if (dataStr) {
                   try {
                     const data: ScanProgress = JSON.parse(dataStr);
+                    
+                    // Use event type from SSE if data.type is missing
+                    if (!data.type && eventType) {
+                      data.type = eventType as any;
+                    }
                     
                     // Accumulate partial results
                     if (data.secrets) {
@@ -176,7 +160,7 @@ export const scanRepositoryStream = async (
                     onProgress(data);
                     
                     // Then handle completion/error
-                    if (data.type === 'complete') {
+                    if (data.type === 'complete' || eventType === 'complete') {
                       clearTimeout(timeoutId);
                       // Store final result
                       if (data.finalResult) {
@@ -202,6 +186,7 @@ export const scanRepositoryStream = async (
                       // Resolve with finalResult - ensure it's valid
                       if (finalResult) {
                         resolve(finalResult);
+                        return;
                       } else if (accumulatedResult) {
                         // Fallback to accumulated result if finalResult is missing
                         console.log('Using accumulated result as fallback');
@@ -214,12 +199,22 @@ export const scanRepositoryStream = async (
                           lastScanned: new Date().toISOString(),
                           error: undefined,
                         } as ScanResult);
+                        return;
                       } else {
-                        // No result at all - reject
-                        reject(new Error('Scan completed but no result data received'));
+                        // Complete event received but no data - return empty result (scan completed successfully)
+                        console.log('Complete event received but no data - returning empty result');
+                        resolve({
+                          repository: repository,
+                          secrets: [],
+                          vulnerabilities: [],
+                          outdatedDependencies: [],
+                          securityScore: 100,
+                          lastScanned: new Date().toISOString(),
+                          error: undefined,
+                        } as ScanResult);
+                        return;
                       }
-                      return;
-                    } else if (data.type === 'error') {
+                    } else if (data.type === 'error' || eventType === 'error') {
                       clearTimeout(timeoutId);
                       reader.cancel().catch(() => {});
                       reject(new Error(data.message || 'Scan failed'));
@@ -229,6 +224,35 @@ export const scanRepositoryStream = async (
                     console.error('Error parsing SSE data:', e, 'Raw data:', dataStr);
                   }
                 }
+              }
+              
+              // CRITICAL: After processing buffer, check if stream is done
+              // This ensures any complete event in buffer was processed first
+              if (done) {
+                clearTimeout(timeoutId);
+                // Stream ended - try to use final result or accumulated data
+                if (finalResult) {
+                  console.log('Stream ended with final result');
+                  resolve(finalResult);
+                } else if (accumulatedResult) {
+                  // Use accumulated result if we have partial data
+                  console.warn('Stream ended without complete event, using accumulated data');
+                  const accumulatedScanResult = {
+                    repository: repository,
+                    secrets: accumulatedResult.secrets || [],
+                    vulnerabilities: accumulatedResult.vulnerabilities || [],
+                    outdatedDependencies: accumulatedResult.outdatedDependencies || [],
+                    securityScore: accumulatedResult.securityScore || 100,
+                    lastScanned: new Date().toISOString(),
+                    error: undefined,
+                  } as ScanResult;
+                  // Resolve with accumulated result - this will be handled by frontend
+                  resolve(accumulatedScanResult);
+                } else {
+                  // No data at all - this is a real error
+                  reject(new Error('Stream ended without complete event or any data'));
+                }
+                break;
               }
             }
           } catch (error: any) {
