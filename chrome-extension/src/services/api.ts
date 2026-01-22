@@ -286,20 +286,36 @@ export const scanRepositoryStream = async (
                 if (finalResult) {
                   console.log('Stream ended with final result');
                   resolve(finalResult);
-                } else if (accumulatedResult) {
-                  // Use accumulated result if we have partial data
+                } else if (accumulatedResult && 
+                           ((accumulatedResult.secrets && accumulatedResult.secrets.length > 0) ||
+                            (accumulatedResult.vulnerabilities && accumulatedResult.vulnerabilities.length > 0) ||
+                            (accumulatedResult.outdatedDependencies && accumulatedResult.outdatedDependencies.length > 0) ||
+                            (accumulatedResult.securityScore !== undefined && accumulatedResult.securityScore !== 100))) {
+                  // Use accumulated result if we have meaningful data
                   console.warn('Stream ended without complete event, using accumulated data');
                   const accumulatedScanResult = {
                     repository: repository,
                     secrets: accumulatedResult.secrets || [],
                     vulnerabilities: accumulatedResult.vulnerabilities || [],
                     outdatedDependencies: accumulatedResult.outdatedDependencies || [],
-                    securityScore: accumulatedResult.securityScore || 100,
+                    securityScore: accumulatedResult.securityScore !== undefined ? accumulatedResult.securityScore : 100,
                     lastScanned: new Date().toISOString(),
                     error: undefined,
                   } as ScanResult;
                   // Resolve with accumulated result - this will be handled by frontend
                   resolve(accumulatedScanResult);
+                } else if (accumulatedResult) {
+                  // Even if no issues found, return success result
+                  console.log('Stream ended without complete event, but scan completed (no issues found)');
+                  resolve({
+                    repository: repository,
+                    secrets: accumulatedResult.secrets || [],
+                    vulnerabilities: accumulatedResult.vulnerabilities || [],
+                    outdatedDependencies: accumulatedResult.outdatedDependencies || [],
+                    securityScore: accumulatedResult.securityScore !== undefined ? accumulatedResult.securityScore : 100,
+                    lastScanned: new Date().toISOString(),
+                    error: undefined,
+                  } as ScanResult);
                 } else {
                   // No data at all - this is a real error
                   reject(new Error('Stream ended without complete event or any data'));
