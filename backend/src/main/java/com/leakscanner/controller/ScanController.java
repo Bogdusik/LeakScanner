@@ -97,11 +97,23 @@ public class ScanController {
                 
                 // CRITICAL: Give time for complete event to reach client before closing connection
                 // This prevents "Stream ended without complete event" errors
+                // Send a final heartbeat to ensure connection is alive
                 try {
-                    Thread.sleep(500); // 500ms delay to ensure event is sent
+                    // Send a keepalive event to ensure connection is still open
+                    emitter.send(SseEmitter.event()
+                            .name("heartbeat")
+                            .data(ScanProgressDTO.builder()
+                                    .type("heartbeat")
+                                    .progress(100)
+                                    .status("Finalizing...")
+                                    .build()));
+                    // Wait longer to ensure complete event is fully transmitted
+                    Thread.sleep(1000); // 1 second delay to ensure event is sent and received
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     log.warn("Interrupted while waiting before closing emitter");
+                } catch (IOException e) {
+                    log.warn("Error sending heartbeat before close: {}", e.getMessage());
                 }
                 
                 emitter.complete();
