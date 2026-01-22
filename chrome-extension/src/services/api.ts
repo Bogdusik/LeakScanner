@@ -167,6 +167,10 @@ export const scanRepositoryStream = async (
                     if (data.outdatedDependencies) {
                       accumulatedResult = { ...(accumulatedResult || {}), outdatedDependencies: data.outdatedDependencies };
                     }
+                    // Also accumulate securityScore if provided in progress events
+                    if (data.securityScore !== undefined) {
+                      accumulatedResult = { ...(accumulatedResult || {}), securityScore: data.securityScore };
+                    }
                     
                     // Call onProgress FIRST to update UI immediately
                     onProgress(data);
@@ -177,8 +181,10 @@ export const scanRepositoryStream = async (
                       // Store final result
                       if (data.finalResult) {
                         finalResult = data.finalResult;
+                        console.log('Received complete event with finalResult');
                       } else if (accumulatedResult) {
                         // If no finalResult but we have accumulated data, create result
+                        console.log('Complete event without finalResult, using accumulated data');
                         finalResult = {
                           repository: repository,
                           secrets: accumulatedResult.secrets || [],
@@ -189,13 +195,16 @@ export const scanRepositoryStream = async (
                           error: undefined,
                         } as ScanResult;
                       }
-                      // Cancel reader to close connection immediately
-                      reader.cancel().catch(() => {});
+                      // Give a small delay before canceling to ensure event is processed
+                      setTimeout(() => {
+                        reader.cancel().catch(() => {});
+                      }, 100);
                       // Resolve with finalResult - ensure it's valid
                       if (finalResult) {
                         resolve(finalResult);
                       } else if (accumulatedResult) {
                         // Fallback to accumulated result if finalResult is missing
+                        console.log('Using accumulated result as fallback');
                         resolve({
                           repository: repository,
                           secrets: accumulatedResult.secrets || [],

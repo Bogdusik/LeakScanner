@@ -15,6 +15,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 @RestController
@@ -94,6 +95,15 @@ public class ScanController {
                     }
                 }
                 
+                // CRITICAL: Give time for complete event to reach client before closing connection
+                // This prevents "Stream ended without complete event" errors
+                try {
+                    Thread.sleep(500); // 500ms delay to ensure event is sent
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.warn("Interrupted while waiting before closing emitter");
+                }
+                
                 emitter.complete();
                 log.info("Stream scan completed successfully");
             } catch (Exception e) {
@@ -105,6 +115,12 @@ public class ScanController {
                                     .type("error")
                                     .message("Scan failed: " + e.getMessage())
                                     .build()));
+                    // Give time for error event to reach client
+                    try {
+                        Thread.sleep(300);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
                     emitter.complete();
                 } catch (IOException ex) {
                     log.error("Error completing emitter after error", ex);
