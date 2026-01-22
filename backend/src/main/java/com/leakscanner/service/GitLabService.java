@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -41,16 +42,31 @@ public class GitLabService {
                     .retrieve()
                     .bodyToFlux(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {})
                     .collectList()
+                    .timeout(Duration.ofSeconds(15))
                     .block();
             
             if (response != null) {
+                int maxFiles = 50; // Reduced to 50 files to prevent hanging
+                int fileCount = 0;
+                
                 for (Map<String, Object> item : response) {
+                    if (fileCount >= maxFiles) {
+                        log.warn("Reached file limit ({}), stopping file collection", maxFiles);
+                        break;
+                    }
+                    
                     String path = (String) item.get("path");
                     String type = (String) item.get("type");
                     
                     if ("blob".equals(type)) {
-                        String content = getFileContent(repositoryDTO, path, token);
-                        files.add(new RepositoryFile(path, content));
+                        try {
+                            String content = getFileContent(repositoryDTO, path, token);
+                            files.add(new RepositoryFile(path, content));
+                            fileCount++;
+                        } catch (Exception e) {
+                            log.warn("Error getting content for file {}: {}", path, e.getMessage());
+                            // Continue with next file instead of failing completely
+                        }
                     }
                 }
             }
@@ -76,6 +92,7 @@ public class GitLabService {
                     .uri(url)
                     .retrieve()
                     .bodyToMono(String.class)
+                    .timeout(Duration.ofSeconds(10))
                     .block();
             
         } catch (Exception e) {
@@ -96,6 +113,7 @@ public class GitLabService {
                     .uri(url)
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(10))
                     .block();
             
             if (response != null && response.containsKey("id")) {
