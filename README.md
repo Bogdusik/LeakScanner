@@ -100,6 +100,21 @@ npm run build
 
 ## ⚙️ Configuration
 
+### Environment Variables
+
+1. Copy `.env.example` to `.env`:
+```bash
+cp .env.example .env
+```
+
+2. Update `.env` with your actual database credentials:
+```bash
+POSTGRES_PASSWORD=your_secure_password_here
+DB_PASSWORD=your_secure_password_here
+```
+
+3. For Docker Compose, the `.env` file will be automatically loaded.
+
 ### Backend
 
 Settings are in `backend/src/main/resources/application.yml`:
@@ -107,9 +122,9 @@ Settings are in `backend/src/main/resources/application.yml`:
 ```yaml
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/leakscanner
-    username: postgres
-    password: postgres
+    url: jdbc:postgresql://localhost:5432/${DB_NAME:leakscanner}
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
 
 leakscanner:
   api:
@@ -120,6 +135,8 @@ leakscanner:
     snyk:
       base-url: https://api.snyk.io/v1
 ```
+
+**Important:** Never commit actual passwords to the repository. Use environment variables or a `.env` file (see `.env.example`).
 
 ### Chrome Extension
 
