@@ -85,21 +85,14 @@ public class GitLabService {
             String projectId = getProjectId(repositoryDTO, token);
             if (projectId == null) return null;
             
-            // Properly encode the file path - GitLab API requires URL encoding
-            // Encode each path segment separately to preserve slashes
-            String[] pathSegments = filePath.split("/");
-            StringBuilder encodedPath = new StringBuilder();
-            for (int i = 0; i < pathSegments.length; i++) {
-                if (i > 0) encodedPath.append("%2F"); // URL-encoded slash
-                encodedPath.append(java.net.URLEncoder.encode(pathSegments[i], java.nio.charset.StandardCharsets.UTF_8)
-                        .replace("+", "%20")); // Use %20 for spaces
-            }
+            // Use WebClient's URI builder which handles encoding automatically
+            // GitLab API requires path segments to be encoded, but WebClient does this correctly
+            var uriSpec = webClient.get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/projects/{projectId}/repository/files/{path}/raw")
+                            .build(projectId, filePath)); // WebClient will encode this automatically
             
-            String uri = String.format("/projects/%s/repository/files/%s/raw", 
-                    projectId, encodedPath.toString());
-            
-            return webClient.get()
-                    .uri(uri)
+            return uriSpec
                     .retrieve()
                     .bodyToMono(String.class)
                     .timeout(Duration.ofSeconds(15)) // Increased timeout
