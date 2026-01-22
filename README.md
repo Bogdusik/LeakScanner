@@ -1,89 +1,89 @@
 # LeakScanner - Security Scanner Extension
 
-Полнофункциональное Chrome расширение для сканирования репозиториев GitHub/GitLab на предмет уязвимостей безопасности, утечек секретов и устаревших зависимостей.
+A fully functional Chrome extension for scanning GitHub/GitLab repositories for security vulnerabilities, secret leaks, and outdated dependencies.
 
-## 🚀 Возможности
+## 🚀 Features
 
-- **Сканирование секретов**: Автоматическое обнаружение API ключей, токенов, паролей и других секретов
-- **Анализ уязвимостей**: Интеграция с npm audit и Snyk для обнаружения уязвимостей в зависимостях
-- **Проверка зависимостей**: Определение устаревших пакетов и рекомендации по обновлению
-- **Security Score**: Автоматический расчет оценки безопасности репозитория (0-100)
-- **История сканирований**: Сохранение результатов в базе данных для отслеживания изменений
-- **Кэширование**: Оптимизация производительности через кэширование результатов
+- **Secret Scanning**: Automatic detection of API keys, tokens, passwords, and other secrets
+- **Vulnerability Analysis**: Integration with npm audit and Snyk for dependency vulnerability detection
+- **Dependency Checking**: Identification of outdated packages and update recommendations
+- **Security Score**: Automatic calculation of repository security score (0-100)
+- **Scan History**: Results saved to database for tracking changes over time
+- **Caching**: Performance optimization through result caching
 
-## 🛠 Технологии
+## 🛠 Technologies
 
 ### Frontend (Chrome Extension)
-- **React 18** с TypeScript
-- **Vite** для сборки
-- **Tailwind CSS** для стилизации
-- **Zustand** для управления состоянием
-- **Lucide React** для иконок
+- **React 18** with TypeScript
+- **Vite** for building
+- **Tailwind CSS** for styling
+- **Zustand** for state management
+- **Lucide React** for icons
 
 ### Backend
-- **Spring Boot 3.2** с Java 17
-- **PostgreSQL** для хранения данных
-- **Spring Data JPA** для работы с БД
-- **WebFlux** для асинхронных HTTP запросов
-- **Caffeine Cache** для кэширования
-- **Lombok** для уменьшения boilerplate кода
+- **Spring Boot 3.2** with Java 17
+- **PostgreSQL** for data storage
+- **Spring Data JPA** for database operations
+- **WebFlux** for asynchronous HTTP requests
+- **Caffeine Cache** for caching
+- **Lombok** for reducing boilerplate code
 
-### Интеграции
-- **GitHub API** для получения файлов репозитория
-- **GitLab API** для работы с GitLab репозиториями
-- **npm Registry API** для проверки версий пакетов
-- **Snyk API** для расширенного анализа уязвимостей
+### Integrations
+- **GitHub API** for repository file retrieval
+- **GitLab API** for GitLab repository operations
+- **npm Registry API** for package version checking
+- **Snyk API** for advanced vulnerability analysis
 
-### Инфраструктура
-- **Docker** и **Docker Compose** для локальной разработки
-- **AWS Lambda** для serverless сканирования (опционально)
+### Infrastructure
+- **Docker** and **Docker Compose** for local development
+- **AWS Lambda** for serverless scanning (optional)
 
-## 📦 Установка
+## 📦 Installation
 
-### Предварительные требования
+### Prerequisites
 
-- Node.js 18+ и npm
+- Node.js 18+ and npm
 - Java 17+
 - Maven 3.9+
-- Docker и Docker Compose
-- PostgreSQL 15+ (или используйте Docker)
+- Docker and Docker Compose
+- PostgreSQL 15+ (or use Docker)
 
-### 1. Клонирование репозитория
+### 1. Clone Repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/Bogdusik/LeakScanner.git
 cd LeakScanner
 ```
 
-### 2. Запуск Backend
+### 2. Start Backend
 
-#### С Docker Compose (рекомендуется):
+#### With Docker Compose (recommended):
 
 ```bash
 docker-compose up -d
 ```
 
-Backend будет доступен на `http://localhost:8080`
+Backend will be available at `http://localhost:8080`
 
-#### Без Docker:
+#### Without Docker:
 
-1. Создайте базу данных PostgreSQL:
+1. Create PostgreSQL database:
 ```bash
 createdb leakscanner
 ```
 
-2. Запустите SQL скрипт:
+2. Run SQL script:
 ```bash
 psql -d leakscanner -f database/init.sql
 ```
 
-3. Запустите Spring Boot приложение:
+3. Run Spring Boot application:
 ```bash
 cd backend
 mvn spring-boot:run
 ```
 
-### 3. Сборка Chrome Extension
+### 3. Build Chrome Extension
 
 ```bash
 cd chrome-extension
@@ -91,25 +91,40 @@ npm install
 npm run build
 ```
 
-### 4. Установка Extension в Chrome
+### 4. Install Extension in Chrome
 
-1. Откройте Chrome и перейдите в `chrome://extensions/`
-2. Включите "Режим разработчика"
-3. Нажмите "Загрузить распакованное расширение"
-4. Выберите папку `chrome-extension/dist`
+1. Open Chrome and navigate to `chrome://extensions/`
+2. Enable "Developer mode"
+3. Click "Load unpacked"
+4. Select the `chrome-extension/dist` folder
 
-## ⚙️ Конфигурация
+## ⚙️ Configuration
+
+### Environment Variables
+
+1. Copy `.env.example` to `.env`:
+```bash
+cp .env.example .env
+```
+
+2. Update `.env` with your actual database credentials:
+```bash
+POSTGRES_PASSWORD=your_secure_password_here
+DB_PASSWORD=your_secure_password_here
+```
+
+3. For Docker Compose, the `.env` file will be automatically loaded.
 
 ### Backend
 
-Настройки находятся в `backend/src/main/resources/application.yml`:
+Settings are in `backend/src/main/resources/application.yml`:
 
 ```yaml
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/leakscanner
-    username: postgres
-    password: postgres
+    url: jdbc:postgresql://localhost:5432/${DB_NAME:leakscanner}
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
 
 leakscanner:
   api:
@@ -121,41 +136,43 @@ leakscanner:
       base-url: https://api.snyk.io/v1
 ```
 
+**Important:** Never commit actual passwords to the repository. Use environment variables or a `.env` file (see `.env.example`).
+
 ### Chrome Extension
 
-Настройки можно изменить в popup расширения:
-- Backend API URL (по умолчанию: `http://localhost:8080`)
-- GitHub Token (опционально, для приватных репозиториев)
-- GitLab Token (опционально)
-- Snyk Token (опционально, для расширенного сканирования)
+Settings can be changed in the extension popup:
+- Backend API URL (default: `http://localhost:8080`)
+- GitHub Token (optional, for private repositories)
+- GitLab Token (optional)
+- Snyk Token (optional, for enhanced scanning)
 
-## 📖 Использование
+## 📖 Usage
 
-1. Откройте любой репозиторий на GitHub или GitLab
-2. Нажмите на иконку расширения в панели инструментов Chrome
-3. Нажмите "Scan Repository"
-4. Дождитесь завершения сканирования
-5. Просмотрите результаты:
-   - Security Score (общая оценка безопасности)
-   - Secret Leaks (найденные секреты)
-   - Vulnerabilities (уязвимости)
-   - Outdated Dependencies (устаревшие зависимости)
+1. Open any repository on GitHub or GitLab
+2. Click the extension icon in Chrome toolbar
+3. Click "Scan Repository"
+4. Wait for scan completion
+5. Review results:
+   - Security Score (overall security rating)
+   - Secret Leaks (found secrets)
+   - Vulnerabilities (security vulnerabilities)
+   - Outdated Dependencies (outdated packages)
 
-## 🔍 Паттерны сканирования секретов
+## 🔍 Secret Scanning Patterns
 
-Расширение обнаруживает следующие типы секретов:
+The extension detects the following types of secrets:
 
-- AWS Access Keys и Secret Keys
-- GitHub и GitLab токены
-- Приватные ключи (RSA, EC, OpenSSH)
-- API ключи
-- Пароли в открытом виде
-- JWT токены
-- MongoDB и PostgreSQL connection strings
-- Slack токены
-- Stripe ключи
+- AWS Access Keys and Secret Keys
+- GitHub and GitLab tokens
+- Private keys (RSA, EC, OpenSSH)
+- API keys
+- Plain text passwords
+- JWT tokens
+- MongoDB and PostgreSQL connection strings
+- Slack tokens
+- Stripe keys
 
-## 🏗 Архитектура
+## 🏗 Architecture
 
 ```
 LeakScanner/
@@ -164,30 +181,30 @@ LeakScanner/
 │   │   ├── popup/       # Popup UI
 │   │   ├── content/     # Content scripts
 │   │   ├── background/  # Background service worker
-│   │   └── services/    # API клиент
-│   └── dist/            # Собранное расширение
+│   │   └── services/    # API client
+│   └── dist/            # Built extension
 │
 ├── backend/             # Spring Boot Backend
 │   ├── src/main/java/
-│   │   ├── controller/ # REST контроллеры
-│   │   ├── service/    # Бизнес-логика
-│   │   ├── model/      # JPA сущности
+│   │   ├── controller/ # REST controllers
+│   │   ├── service/    # Business logic
+│   │   ├── model/      # JPA entities
 │   │   ├── repository/ # Data repositories
-│   │   └── config/     # Конфигурация
+│   │   └── config/     # Configuration
 │   └── pom.xml
 │
-├── database/            # SQL скрипты
+├── database/            # SQL scripts
 │   └── init.sql
 │
-├── aws-lambda/          # AWS Lambda функция (опционально)
+├── aws-lambda/          # AWS Lambda function (optional)
 │   └── src/
 │
-└── docker-compose.yml   # Docker Compose конфигурация
+└── docker-compose.yml   # Docker Compose configuration
 ```
 
-## 🧪 Разработка
+## 🧪 Development
 
-### Запуск в режиме разработки
+### Running in Development Mode
 
 **Backend:**
 ```bash
@@ -201,14 +218,14 @@ cd chrome-extension
 npm run dev
 ```
 
-### Тестирование
+### Testing
 
 ```bash
 # Backend tests
 cd backend
 mvn test
 
-# Extension tests (если добавлены)
+# Extension tests (if added)
 cd chrome-extension
 npm test
 ```
@@ -216,7 +233,7 @@ npm test
 ## 📊 API Endpoints
 
 ### POST `/api/v1/scan`
-Сканирование репозитория
+Scan a repository
 
 **Request:**
 ```json
@@ -244,49 +261,49 @@ npm test
 ```
 
 ### GET `/api/v1/scan/history`
-Получение истории сканирований
+Get scan history
 
 **Query Parameters:**
-- `owner`: Владелец репозитория
-- `name`: Имя репозитория
-- `platform`: Платформа (github/gitlab)
+- `owner`: Repository owner
+- `name`: Repository name
+- `platform`: Platform (github/gitlab)
 
-## 🔒 Безопасность
+## 🔒 Security
 
-- Все токены хранятся локально в Chrome storage (sync)
-- API ключи передаются через заголовки HTTP
-- Rate limiting для защиты от злоупотреблений
-- Валидация входных данных
-- SQL injection защита через JPA
+- All tokens stored locally in Chrome storage (sync)
+- API keys passed via HTTP headers
+- Rate limiting for abuse protection
+- Input validation
+- SQL injection protection via JPA
 
 ## 🚀 Deployment
 
-### Backend на AWS
+### Backend on AWS
 
-1. Соберите JAR:
+1. Build JAR:
 ```bash
 cd backend
 mvn clean package
 ```
 
-2. Загрузите на EC2 или используйте Elastic Beanstalk
+2. Deploy to EC2 or use Elastic Beanstalk
 
 ### AWS Lambda
 
-См. `aws-lambda/README.md` для инструкций по развертыванию Lambda функции.
+See `aws-lambda/README.md` for Lambda function deployment instructions.
 
-## 🤝 Вклад
+## 🤝 Contributing
 
-Приветствуются pull requests! Пожалуйста, откройте issue для обсуждения больших изменений.
+Pull requests are welcome! Please open an issue to discuss major changes.
 
-## 📝 Лицензия
+## 📝 License
 
 MIT License
 
-## 👤 Автор
+## 👤 Author
 
-Создано с использованием современных технологий и best practices.
+Bohdan.
 
 ---
 
-**Примечание**: Для работы с приватными репозиториями необходимо настроить соответствующие токены в настройках расширения.
+**Note**: To work with private repositories, you need to configure the corresponding tokens in the extension settings.

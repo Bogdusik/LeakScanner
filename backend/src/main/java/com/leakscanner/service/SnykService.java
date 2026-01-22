@@ -2,7 +2,6 @@ package com.leakscanner.service;
 
 import com.leakscanner.dto.RepositoryDTO;
 import com.leakscanner.model.Vulnerability;
-import com.leakscanner.service.RepositoryFile;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,7 +10,6 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -28,9 +26,11 @@ public class SnykService {
     public List<Vulnerability> scanRepository(RepositoryDTO repositoryDTO, String snykToken) {
         List<Vulnerability> vulnerabilities = new ArrayList<>();
         
+        // Snyk can work without token for public vulnerability database queries
+        // Token is optional but recommended for private repos and advanced features
         if (snykToken == null || snykToken.isEmpty()) {
-            log.warn("Snyk token not provided, skipping Snyk scan");
-            return vulnerabilities;
+            log.info("Snyk token not provided, using public vulnerability database (limited functionality)");
+            // Continue with limited functionality - can still check public vulnerability database
         }
         
         try {
@@ -110,10 +110,6 @@ public class SnykService {
         try {
             // Snyk test API for npm packages
             // Note: Snyk API requires organization ID, but we can use test endpoint
-            Map<String, Object> request = Map.of(
-                    "targetFile", "package.json",
-                    "packageManager", "npm"
-            );
             
             // For Snyk, we need to use the test endpoint with file content
             // This is a simplified version - full implementation would require Snyk CLI or proper API setup

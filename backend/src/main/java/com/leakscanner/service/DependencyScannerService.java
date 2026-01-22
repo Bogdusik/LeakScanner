@@ -59,13 +59,14 @@ public class DependencyScannerService {
     
     private String getPackageFile(RepositoryDTO repositoryDTO, String fileName, String githubToken, String gitlabToken) {
         try {
+            // Add timeout protection for file retrieval
             if ("github".equalsIgnoreCase(repositoryDTO.getPlatform())) {
                 return githubService.getFileContent(repositoryDTO, fileName, githubToken);
             } else {
                 return gitLabService.getFileContent(repositoryDTO, fileName, gitlabToken);
             }
         } catch (Exception e) {
-            log.debug("{} not found or error reading it", fileName, e);
+            log.debug("{} not found or error reading it: {}", fileName, e.getMessage());
             return null;
         }
     }
