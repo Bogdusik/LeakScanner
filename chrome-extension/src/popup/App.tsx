@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Shield, AlertTriangle, CheckCircle, Loader2, RefreshCw, Settings, ExternalLink, Package } from 'lucide-react';
 import { useScanStore } from '../store/scanStore';
-import { scanRepository } from '../services/api';
+import { scanRepositoryStream } from '../services/api';
+import { ScanResult, ScanProgress } from '../types';
 import ScanResults from './components/ScanResults';
 import SettingsPanel from './components/SettingsPanel';
 import { getCurrentRepository } from '../utils/repository';
@@ -15,8 +16,8 @@ const App: React.FC = () => {
   const setLoading = useScanStore((state) => state.setLoading);
   const [showSettings, setShowSettings] = useState(false);
   const [currentRepo, setCurrentRepo] = useState<Repository | null>(null);
-  const [hasTokens, setHasTokens] = useState<{github: boolean, gitlab: boolean, snyk: boolean}>({github: false, gitlab: false, snyk: false});
-  const [scanProgress, setScanProgress] = useState<{ percent: number; status: string }>({
+  const [hasTokens, setHasTokens] = useState<{github: boolean, gitlab: boolean}>({github: false, gitlab: false});
+  const [scanProgress, setScanProgress] = useState<{ percent: number; status: string; estimatedTimeRemaining?: number }>({
     percent: 0,
     status: 'Idle',
   });
@@ -38,11 +39,10 @@ const App: React.FC = () => {
   };
 
   const checkTokens = async () => {
-    const settings = await chrome.storage.sync.get(['githubToken', 'gitlabToken', 'snykToken']);
+    const settings = await chrome.storage.sync.get(['githubToken', 'gitlabToken']);
     setHasTokens({
       github: !!settings.githubToken,
       gitlab: !!settings.gitlabToken,
-      snyk: !!settings.snykToken,
     });
   };
 
@@ -70,6 +70,11 @@ const App: React.FC = () => {
     const cached = await chrome.storage.local.get(cacheKey);
     if (cached[cacheKey]) {
       setScanResult(cached[cacheKey]);
+      // Reset progress to 100% if we have a cached result (scan was completed)
+      setScanProgress({ percent: 100, status: 'Completed', estimatedTimeRemaining: undefined });
+    } else {
+      // Reset progress if no cached result
+      setScanProgress({ percent: 0, status: 'Idle' });
     }
   };
 
@@ -90,21 +95,152 @@ const App: React.FC = () => {
     let scanCompleted = false;
     
     try {
-      setScanProgress({ percent: 5, status: 'Collecting repository metadata...' });
-      const result = await scanRepository(currentRepo);
+      setScanProgress({ percent: 5, status: 'Starting scan...' });
       
-      // Ensure progress reaches 100% when result arrives
-      setScanProgress({ percent: 100, status: 'Completed' });
-      setScanResult(result);
-      // Force a small delay to ensure state update
-      await new Promise(resolve => setTimeout(resolve, 100));
-      scanCompleted = true;
+      // Initialize result state
+      let currentResult: ScanResult = {
+        repository: currentRepo,
+        secrets: [],
+        vulnerabilities: [],
+        outdatedDependencies: [],
+        securityScore: 100,
+        lastScanned: new Date().toISOString(),
+      };
+      setScanResult(currentResult);
       
-      // Cache result
+      // Record scan start time for estimated time calculation
+      const startTime = Date.now();
+      
+      // Use streaming scan to get results in real-time
+      const result = await scanRepositoryStream(
+        currentRepo,
+        (progress: ScanProgress) => {
+          // Calculate estimated time remaining
+          const calculateEstimatedTime = (currentPercent: number): number | undefined => {
+            if (currentPercent <= 0 || currentPercent >= 100) return undefined;
+            const elapsed = Date.now() - startTime;
+            const estimatedTotal = (elapsed / currentPercent) * 100;
+            const remaining = estimatedTotal - elapsed;
+            return Math.max(0, Math.round(remaining / 1000)); // Return in seconds
+          };
+          
+          // Handle complete event FIRST to ensure immediate UI update
+          if (progress.type === 'complete') {
+            // Immediately update to 100% and show final result
+            console.log('Received complete event, updating UI to 100%');
+            setScanProgress({ percent: 100, status: 'Completed', estimatedTimeRemaining: undefined });
+            if (progress.finalResult) {
+              setScanResult(progress.finalResult);
+              currentResult = progress.finalResult;
+              // Cache immediately
+              const cacheKey = `${currentRepo.platform}:${currentRepo.owner}/${currentRepo.name}`;
+              chrome.storage.local.set({ [cacheKey]: progress.finalResult }).catch(console.error);
+            } else {
+              // If no finalResult, use accumulated result
+              setScanResult(currentResult);
+            }
+            // Stop progress timer immediately
+            stopProgress(true);
+            return; // Exit early to prevent other handlers
+          }
+          
+          // Update progress for all other events
+          if (progress.progress !== undefined) {
+            const estimatedTime = calculateEstimatedTime(progress.progress);
+            setScanProgress({ 
+              percent: progress.progress, 
+              status: progress.status || 'Scanning...',
+              estimatedTimeRemaining: estimatedTime
+            });
+          } else if (progress.status) {
+            // Update status even if progress is not provided
+            setScanProgress(prev => ({ 
+              ...prev,
+              status: progress.status || prev.status
+            }));
+          }
+          
+          // Update results as they come in - merge with existing results
+          if (progress.type === 'secrets' && progress.secrets) {
+            currentResult = {
+              ...currentResult,
+              secrets: progress.secrets,
+            };
+            setScanResult({ ...currentResult });
+          }
+          
+          if (progress.type === 'vulnerabilities' && progress.vulnerabilities) {
+            currentResult = {
+              ...currentResult,
+              vulnerabilities: progress.vulnerabilities,
+            };
+            setScanResult({ ...currentResult });
+          }
+          
+          if (progress.type === 'dependencies' && progress.outdatedDependencies) {
+            currentResult = {
+              ...currentResult,
+              outdatedDependencies: progress.outdatedDependencies,
+            };
+            setScanResult({ ...currentResult });
+          }
+          
+          // Update progress status for progress events
+          if (progress.type === 'progress' && progress.status) {
+            setScanProgress({ 
+              percent: progress.progress || 0, 
+              status: progress.status 
+            });
+          }
+        },
+        true // Always force rescan
+      ).catch((error: any) => {
+        // If we get an error but have accumulated results, try to use them
+        console.warn('Stream error, but may have partial results:', error);
+        // Return accumulated result if available, otherwise throw
+        if (currentResult && (currentResult.secrets.length > 0 || currentResult.vulnerabilities.length > 0 || currentResult.outdatedDependencies.length > 0)) {
+          console.log('Using accumulated result despite error');
+          // Update UI with accumulated result
+          setScanProgress({ percent: 100, status: 'Completed', estimatedTimeRemaining: undefined });
+          setScanResult(currentResult);
+          scanCompleted = true;
+          // Cache the result
+          const cacheKey = `${currentRepo.platform}:${currentRepo.owner}/${currentRepo.name}`;
+          chrome.storage.local.set({ [cacheKey]: currentResult }).catch(console.error);
+          return currentResult;
+        }
+        throw error;
+      });
+      
+      // Ensure progress reaches 100% and result is set when promise resolves
+      // (This is a safety net - should already be set by complete event handler)
+      // But we ensure it's set here in case the event handler didn't fire
+      if (result) {
+        setScanProgress({ percent: 100, status: 'Completed', estimatedTimeRemaining: undefined });
+        setScanResult(result);
+        scanCompleted = true;
+      }
+      
+      // Cache result immediately so it's available even if user closes extension
       const cacheKey = `${currentRepo.platform}:${currentRepo.owner}/${currentRepo.name}`;
       await chrome.storage.local.set({ [cacheKey]: result });
+      
+      console.log('Scan completed and cached:', cacheKey);
     } catch (error: any) {
       console.error('Scan error:', error);
+      
+      // Check if we have cached result to use instead
+      const cacheKey = `${currentRepo.platform}:${currentRepo.owner}/${currentRepo.name}`;
+      const cached = await chrome.storage.local.get(cacheKey);
+      
+      if (cached[cacheKey] && !error.message?.includes('Stream ended without complete event or any data')) {
+        // Use cached result if available and error is not about missing data
+        console.log('Using cached result after error');
+        setScanResult(cached[cacheKey]);
+        setScanProgress({ percent: 100, status: 'Completed', estimatedTimeRemaining: undefined });
+        scanCompleted = true;
+        return;
+      }
       
       let errorMessage = 'Failed to scan repository. ';
       
@@ -113,6 +249,16 @@ const App: React.FC = () => {
         errorMessage += `Cannot connect to backend API. Please check if the server is running at ${settings.apiUrl || 'http://localhost:8080'}`;
       } else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
         errorMessage += 'Request timed out. The scan is taking too long. Please try again or check your network connection.';
+      } else if (error.message?.includes('Stream ended without complete event')) {
+        // Special handling for stream errors - try to use cached result
+        if (cached[cacheKey]) {
+          console.log('Stream ended but using cached result');
+          setScanResult(cached[cacheKey]);
+          setScanProgress({ percent: 100, status: 'Completed', estimatedTimeRemaining: undefined });
+          scanCompleted = true;
+          return;
+        }
+        errorMessage += 'Scan stream ended unexpectedly. Results may be incomplete.';
       } else if (error.response) {
         errorMessage += `Server error: ${error.response.status} - ${error.response.data?.message || error.response.statusText}`;
       } else if (error.message) {
@@ -130,7 +276,7 @@ const App: React.FC = () => {
         lastScanned: new Date().toISOString(),
         error: errorMessage,
       });
-      setScanProgress({ percent: 100, status: 'Error' });
+      setScanProgress({ percent: 100, status: 'Error', estimatedTimeRemaining: undefined });
       scanCompleted = true;
     } finally {
       setLoading(false);
@@ -139,7 +285,7 @@ const App: React.FC = () => {
         stopProgress(true);
       } else {
         // If somehow we got here without completion, force it
-        setScanProgress({ percent: 100, status: 'Completed' });
+        setScanProgress({ percent: 100, status: 'Completed', estimatedTimeRemaining: undefined });
         stopProgress(true);
       }
     }
@@ -150,28 +296,55 @@ const App: React.FC = () => {
       clearInterval(progressTimer);
       setProgressTimer(null);
     }
+    const startTime = Date.now();
     setScanProgress({ percent: 5, status: 'Collecting repository metadata...' });
     let currentPercent = 5;
     const timer = setInterval(() => {
       setScanProgress((prev) => {
-        // Gradually increase progress, but cap at 95% to leave room for completion
-        currentPercent = Math.min(currentPercent + Math.random() * 5, 95);
+        // Gradually increase progress, but cap at 90% to leave room for real progress updates
+        // Real progress updates from backend will override this
+        // Don't update if already at 100% (completed)
+        if (prev.percent >= 100) {
+          return prev; // Keep at 100% once completed
+        }
+        currentPercent = Math.min(currentPercent + Math.random() * 2, 90);
         let status = prev.status;
-        if (currentPercent < 30) status = 'Scanning secrets...';
-        else if (currentPercent < 60) status = 'Analyzing vulnerabilities...';
-        else if (currentPercent < 85) status = 'Checking dependencies...';
-        else status = 'Finalizing results...';
-        return { percent: currentPercent, status };
+        // Only update status if it hasn't been updated by real progress from backend
+        // Backend sends: 5%, 10%, 20%, 40%, 50%, 70%, 80%, 90%, 92%, 95%, 98%, 100%
+        if (!prev.status.includes('Calculating') && !prev.status.includes('Saving') && !prev.status.includes('Finalizing') && !prev.status.includes('Completed')) {
+          if (currentPercent < 30) status = 'Scanning secrets...';
+          else if (currentPercent < 60) status = 'Analyzing vulnerabilities...';
+          else if (currentPercent < 85) status = 'Checking dependencies...';
+          else status = 'Finalizing...';
+        } else {
+          status = prev.status; // Keep real status from backend
+        }
+        
+        // Calculate estimated time remaining using startTime from closure
+        let estimatedTime: number | undefined = undefined;
+        if (currentPercent > 0 && currentPercent < 100) {
+          const elapsed = Date.now() - startTime;
+          const estimatedTotal = (elapsed / currentPercent) * 100;
+          const remaining = estimatedTotal - elapsed;
+          estimatedTime = Math.max(0, Math.round(remaining / 1000)); // Return in seconds
+        }
+        
+        return { percent: currentPercent, status, estimatedTimeRemaining: estimatedTime };
       });
     }, 500);
     setProgressTimer(timer);
     
     // Safety timeout: if scan takes too long, force completion (50 seconds)
     setTimeout(() => {
-      if (progressTimer === timer) {
-        setScanProgress({ percent: 100, status: 'Completed' });
-        stopProgress(true);
-      }
+      // Check if this timer is still the active one by using functional update
+      setProgressTimer((currentTimer) => {
+        if (currentTimer === timer) {
+          setScanProgress({ percent: 100, status: 'Completed', estimatedTimeRemaining: undefined });
+          clearInterval(timer);
+          stopProgress(true);
+        }
+        return currentTimer;
+      });
     }, 50000); // 50 seconds (slightly more than backend timeout of 45s)
   };
 
@@ -179,11 +352,19 @@ const App: React.FC = () => {
     if (progressTimer) clearInterval(progressTimer);
     setProgressTimer(null);
     if (instant) {
-      setScanProgress((prev) => ({ ...prev, percent: 100 }));
+      setScanProgress((prev) => ({ ...prev, percent: 100, estimatedTimeRemaining: undefined }));
       setTimeout(() => {
         setScanProgress({ percent: 0, status: 'Idle' });
       }, 900);
     }
+  };
+  
+  const formatTimeRemaining = (seconds: number | undefined): string => {
+    if (seconds === undefined || seconds <= 0) return '';
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return secs > 0 ? `${minutes}m ${secs}s` : `${minutes}m`;
   };
 
   const getSecurityScoreColor = (score: number) => {
@@ -193,13 +374,13 @@ const App: React.FC = () => {
   };
 
   const getSecurityScoreIcon = (score: number) => {
-    if (score >= 80) return <CheckCircle className="w-5 h-5 text-rog-cyan rog-glow-cyan" />;
-    if (score >= 60) return <AlertTriangle className="w-5 h-5 text-rog-purple rog-glow-purple" />;
-    return <AlertTriangle className="w-5 h-5 text-rog-pink rog-glow-pink" />;
+    if (score >= 80) return <CheckCircle className="w-4 h-4 text-rog-cyan rog-glow-cyan" />;
+    if (score >= 60) return <AlertTriangle className="w-4 h-4 text-rog-purple rog-glow-purple" />;
+    return <AlertTriangle className="w-4 h-4 text-rog-pink rog-glow-pink" />;
   };
 
   return (
-    <div className="w-[420px] min-h-[500px] bg-rog-dark relative overflow-hidden border border-rog-gray">
+    <div className="w-[420px] min-h-[450px] bg-rog-dark relative overflow-hidden border border-rog-gray">
       {/* ROG RGB Background Effects */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-0 left-0 w-96 h-96 bg-rog-cyan opacity-10 rounded-full blur-3xl animate-blob"></div>
@@ -208,20 +389,20 @@ const App: React.FC = () => {
       </div>
       
       {/* Header - ROG Style */}
-      <div className="relative bg-rog-darkGray border-b border-rog-cyan/30 rog-border-glow p-3.5">
+      <div className="relative bg-rog-darkGray border-b border-rog-cyan/30 rog-border-glow p-2.5">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="p-1.5 bg-rog-gray rounded-lg rog-glow-cyan">
-              <Shield className="w-5 h-5 text-rog-cyan" />
+          <div className="flex items-center gap-2">
+            <div className="p-1 bg-rog-gray rounded-lg rog-glow-cyan">
+              <Shield className="w-4 h-4 text-rog-cyan" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight rog-text-gradient">LeakScanner</h1>
+            <h1 className="text-lg font-bold tracking-tight rog-text-gradient">LeakScanner</h1>
           </div>
           <button
             onClick={() => setShowSettings(!showSettings)}
-            className="p-1.5 hover:bg-rog-gray rounded-lg transition-all duration-200 hover:scale-110 rog-glow-cyan"
+            className="p-1 hover:bg-rog-gray rounded-lg transition-all duration-200 hover:scale-110 rog-glow-cyan"
             title="Settings"
           >
-            <Settings className="w-4 h-4 text-rog-cyan" />
+            <Settings className="w-3.5 h-3.5 text-rog-cyan" />
           </button>
         </div>
       </div>
@@ -237,26 +418,33 @@ const App: React.FC = () => {
       )}
 
       {/* Main Content */}
-      <div className="relative p-3.5 space-y-3">
+      <div className="relative p-2.5 space-y-2">
         {currentRepo ? (
           <>
             {isLoading && scanProgress.percent > 0 && (
-              <div className="p-3 bg-rog-darkGray border border-rog-cyan/30 rounded-xl rog-glow-cyan">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-rog-cyan to-rog-purple flex items-center justify-center rog-glow">
-                      <Loader2 className="w-4 h-4 text-white animate-spin" />
+              <div className="p-2 bg-rog-darkGray border border-rog-cyan/30 rounded-lg rog-glow-cyan">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <div className="w-5 h-5 rounded bg-gradient-to-br from-rog-cyan to-rog-purple flex items-center justify-center rog-glow">
+                    <Loader2 className="w-3 h-3 text-white animate-spin" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-rog-cyan truncate">Scanning...</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs text-gray-300 leading-tight truncate">{scanProgress.status}</p>
+                      {scanProgress.estimatedTimeRemaining !== undefined && scanProgress.estimatedTimeRemaining > 0 && (
+                        <span className="text-xs text-rog-purple font-medium whitespace-nowrap">
+                          • ~{formatTimeRemaining(scanProgress.estimatedTimeRemaining)}
+                        </span>
+                      )}
                     </div>
-                  <div>
-                    <p className="text-xs font-semibold text-rog-cyan">Scanning...</p>
-                    <p className="text-xs text-gray-300 leading-relaxed">{scanProgress.status}</p>
                   </div>
-                  </div>
-                  <span className="text-xs font-bold text-rog-cyan bg-rog-gray px-2 py-1 rounded-lg rog-glow-cyan">{Math.round(scanProgress.percent)}%</span>
+                  <span className="text-xs font-bold text-rog-cyan bg-rog-gray px-1.5 py-0.5 rounded rog-glow-cyan whitespace-nowrap">
+                    {Math.round(scanProgress.percent)}%
+                  </span>
                 </div>
-                <div className="w-full bg-rog-darker rounded-full h-2 overflow-hidden">
+                <div className="w-full bg-rog-darker rounded-full h-1.5 overflow-hidden">
                   <div
-                    className="h-2 rounded-full bg-gradient-to-r from-rog-cyan via-rog-purple to-rog-pink transition-all duration-300 ease-out rog-glow"
+                    className="h-1.5 rounded-full bg-gradient-to-r from-rog-cyan via-rog-purple to-rog-pink transition-all duration-300 ease-out rog-glow"
                     style={{ width: `${scanProgress.percent}%` }}
                   />
                 </div>
@@ -264,14 +452,14 @@ const App: React.FC = () => {
             )}
 
             {/* Repository Info - ROG Style */}
-            <div className="p-3 bg-rog-darkGray border border-rog-cyan/30 rounded-xl rog-glow-cyan hover:rog-glow transition-all duration-200">
-              <div className="flex items-center justify-between">
+            <div className="p-2 bg-rog-darkGray border border-rog-cyan/30 rounded-lg rog-glow-cyan hover:rog-glow transition-all duration-200">
+              <div className="flex items-center justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5 leading-tight">Repository</p>
-                  <p className="font-bold text-white text-base mb-2 truncate leading-tight">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1 leading-tight">Repository</p>
+                  <p className="font-bold text-white text-sm mb-1 truncate leading-tight">
                     {currentRepo.owner}/{currentRepo.name}
                   </p>
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-rog-gray text-rog-cyan capitalize">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-rog-gray text-rog-cyan capitalize">
                     {currentRepo.platform}
                   </span>
                 </div>
@@ -279,9 +467,9 @@ const App: React.FC = () => {
                   href={`https://${currentRepo.platform === 'github' ? 'github.com' : 'gitlab.com'}/${currentRepo.owner}/${currentRepo.name}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="ml-2 p-1.5 text-rog-cyan hover:text-rog-cyanDark hover:bg-rog-gray rounded-lg transition-all duration-200 rog-glow-cyan"
+                  className="p-1 text-rog-cyan hover:text-rog-cyanDark hover:bg-rog-gray rounded transition-all duration-200 rog-glow-cyan flex-shrink-0"
                 >
-                  <ExternalLink className="w-4 h-4" />
+                  <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               </div>
             </div>
@@ -289,20 +477,20 @@ const App: React.FC = () => {
             {/* Token Warning - ROG Style */}
             {(!hasTokens.github && currentRepo.platform === 'github') || 
              (!hasTokens.gitlab && currentRepo.platform === 'gitlab') ? (
-              <div className="p-2.5 bg-rog-darkGray border border-rog-purple/30 rounded-xl rog-glow-purple">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="w-3.5 h-3.5 text-rog-purple flex-shrink-0 mt-0.5" />
+              <div className="p-2 bg-rog-darkGray border border-rog-purple/30 rounded-lg rog-glow-purple">
+                <div className="flex items-start gap-1.5">
+                  <AlertTriangle className="w-3 h-3 text-rog-purple flex-shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-rog-purple mb-1 leading-tight">
+                    <p className="text-xs font-bold text-rog-purple mb-0.5 leading-tight">
                       Token Recommended
                     </p>
-                    <p className="text-xs text-gray-300 leading-relaxed">
+                    <p className="text-xs text-gray-300 leading-tight">
                       Add {currentRepo.platform === 'github' ? 'GitHub' : 'GitLab'} token for private repos.
                     </p>
                   </div>
                   <button
                     onClick={() => setShowSettings(true)}
-                    className="text-xs text-rog-purple hover:text-rog-purpleDark font-medium underline whitespace-nowrap"
+                    className="text-xs text-rog-purple hover:text-rog-purpleDark font-medium underline whitespace-nowrap flex-shrink-0"
                   >
                     Setup
                   </button>
@@ -318,7 +506,7 @@ const App: React.FC = () => {
                 handleScan();
               }}
               disabled={isLoading || !currentRepo}
-              className="w-full bg-gradient-to-r from-rog-cyan via-rog-purple to-rog-pink hover:from-rog-cyanDark hover:via-rog-purpleDark hover:to-rog-pinkDark disabled:from-gray-600 disabled:via-gray-600 disabled:to-gray-600 text-white font-bold py-2.5 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98] text-sm uppercase tracking-wide"
+              className="w-full bg-gradient-to-r from-rog-cyan via-rog-purple to-rog-pink hover:from-rog-cyanDark hover:via-rog-purpleDark hover:to-rog-pinkDark disabled:from-gray-600 disabled:via-gray-600 disabled:to-gray-600 text-white font-bold py-2 px-3 rounded-lg transition-all duration-200 flex items-center justify-center gap-1.5 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98] text-xs uppercase tracking-wide"
             >
               {isLoading ? (
                 <>
@@ -335,15 +523,15 @@ const App: React.FC = () => {
 
             {/* Security Score - ROG Style with animation */}
             {scanResult ? (
-              <div className="p-3 bg-rog-darkGray border border-rog-cyan/30 rounded-xl rog-glow-cyan animate-fadeIn">
-                <div className="flex items-center justify-between mb-2">
+              <div className="p-2 bg-rog-darkGray border border-rog-cyan/30 rounded-lg rog-glow-cyan animate-fadeIn">
+                <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs font-semibold text-rog-cyan uppercase tracking-wide">Security Score</span>
                   {getSecurityScoreIcon(scanResult.securityScore)}
                 </div>
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="flex-1 bg-rog-darker rounded-full h-2.5 overflow-hidden">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <div className="flex-1 bg-rog-darker rounded-full h-2 overflow-hidden">
                     <div
-                      className={`h-2.5 rounded-full transition-all duration-500 ease-out rog-glow ${
+                      className={`h-2 rounded-full transition-all duration-500 ease-out rog-glow ${
                         scanResult.securityScore >= 80
                           ? 'bg-gradient-to-r from-rog-cyan to-green-500'
                           : scanResult.securityScore >= 60
@@ -353,12 +541,12 @@ const App: React.FC = () => {
                       style={{ width: `${scanResult.securityScore}%` }}
                     />
                   </div>
-                  <span className={`text-xl font-bold ${getSecurityScoreColor(scanResult.securityScore)}`}>
+                  <span className={`text-lg font-bold ${getSecurityScoreColor(scanResult.securityScore)}`}>
                     {scanResult.securityScore}
                   </span>
                 </div>
                 {scanResult.lastScanned && (
-                  <p className="text-xs text-gray-300 flex items-center gap-1.5 leading-relaxed">
+                  <p className="text-xs text-gray-300 flex items-center gap-1 leading-tight">
                     <span className="font-medium">Last scanned:</span>
                     <span className="font-semibold text-rog-cyan">{new Date(scanResult.lastScanned).toLocaleString()}</span>
                   </p>
@@ -368,10 +556,10 @@ const App: React.FC = () => {
 
             {/* Error Message - ROG Style */}
             {scanResult?.error && (
-              <div className="p-2.5 bg-rog-darkGray border border-red-500/30 rounded-xl rog-glow-pink">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-red-400 font-medium">{scanResult.error}</p>
+              <div className="p-2 bg-rog-darkGray border border-red-500/30 rounded-lg rog-glow-pink">
+                <div className="flex items-start gap-1.5">
+                  <AlertTriangle className="w-3 h-3 text-red-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-400 font-medium leading-tight">{scanResult.error}</p>
                 </div>
               </div>
             )}
@@ -385,14 +573,14 @@ const App: React.FC = () => {
 
             {/* Empty State - Improved */}
             {!scanResult && !isLoading && (
-              <div className="text-center py-10 animate-fadeIn">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-rog-darkGray border-2 border-rog-cyan/40 rounded-2xl mb-4 animate-pulse-slow">
-                  <Shield className="w-8 h-8 text-rog-cyan" />
+              <div className="text-center py-8 animate-fadeIn">
+                <div className="inline-flex items-center justify-center w-14 h-14 bg-rog-darkGray border-2 border-rog-cyan/40 rounded-xl mb-3 animate-pulse-slow">
+                  <Shield className="w-7 h-7 text-rog-cyan" />
                 </div>
-                <h3 className="text-base font-bold text-white mb-2 leading-tight">Ready to Scan</h3>
-                <p className="text-sm font-medium text-gray-300 mb-1 leading-relaxed">Click "Scan Repository" to analyze security</p>
-                <p className="text-xs text-gray-400 mt-2 leading-relaxed">Get instant insights on secrets, vulnerabilities, and dependencies</p>
-                <div className="mt-4 flex items-center justify-center gap-2 text-xs text-gray-400">
+                <h3 className="text-sm font-bold text-white mb-1.5 leading-tight">Ready to Scan</h3>
+                <p className="text-xs font-medium text-gray-300 mb-1 leading-tight">Click "Scan Repository" to analyze security</p>
+                <p className="text-xs text-gray-400 mt-1.5 leading-tight">Get instant insights on secrets, vulnerabilities, and dependencies</p>
+                <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-gray-400">
                   <span className="flex items-center gap-1">
                     <Shield className="w-3 h-3 text-rog-cyan" />
                     Secrets
@@ -412,14 +600,14 @@ const App: React.FC = () => {
             )}
           </>
         ) : (
-          <div className="text-center py-16 animate-fadeIn">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-rog-darkGray border-2 border-rog-purple/40 rounded-2xl mb-5">
-              <AlertTriangle className="w-10 h-10 text-rog-purple" />
+          <div className="text-center py-12 animate-fadeIn">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-rog-darkGray border-2 border-rog-purple/40 rounded-xl mb-4">
+              <AlertTriangle className="w-8 h-8 text-rog-purple" />
             </div>
-            <h3 className="text-base font-bold text-white mb-2 leading-tight">No Repository Detected</h3>
-            <p className="text-sm font-medium text-gray-300 mb-1 leading-relaxed">Please navigate to a GitHub or GitLab repository</p>
-            <p className="text-xs text-gray-400 mt-2 leading-relaxed">Open any repository page to start scanning</p>
-            <div className="mt-5 flex items-center justify-center gap-3 text-xs">
+            <h3 className="text-sm font-bold text-white mb-1.5 leading-tight">No Repository Detected</h3>
+            <p className="text-xs font-medium text-gray-300 mb-1 leading-tight">Please navigate to a GitHub or GitLab repository</p>
+            <p className="text-xs text-gray-400 mt-1.5 leading-tight">Open any repository page to start scanning</p>
+            <div className="mt-3 flex items-center justify-center gap-2 text-xs">
               <a 
                 href="https://github.com" 
                 target="_blank" 
