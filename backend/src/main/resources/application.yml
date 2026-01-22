@@ -61,6 +61,7 @@ leakscanner:
 
 logging:
   level:
-    com.leakscanner: INFO
+    com.leakscanner: DEBUG
+    com.leakscanner.service.VulnerabilityScannerService: DEBUG
     org.springframework.web: INFO
     org.hibernate: WARN
