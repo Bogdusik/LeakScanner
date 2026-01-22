@@ -25,7 +25,7 @@ public class ScanController {
             @RequestHeader(value = "X-GitLab-Token", required = false) String gitlabToken,
             @RequestHeader(value = "X-Snyk-Token", required = false) String snykToken
     ) {
-        ScanResultDTO result = scanService.scanRepository(repositoryDTO, githubToken, gitlabToken, snykToken);
+        ScanResultDTO result = scanService.scanRepository(repositoryDTO, githubToken, gitlabToken, snykToken, false);
         return ResponseEntity.ok(result);
     }
     
