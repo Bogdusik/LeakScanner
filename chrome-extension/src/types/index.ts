@@ -46,5 +46,6 @@ export interface ScanProgress {
   progress?: number;
   status?: string;
   message?: string;
+  securityScore?: number;
   finalResult?: ScanResult;
 }
