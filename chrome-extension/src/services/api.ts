@@ -32,7 +32,7 @@ export const scanRepository = async (repository: Repository, forceRescan: boolea
     repository,
     { 
       headers,
-      timeout: 50000, // 50 seconds timeout (matches backend + safety margin)
+      timeout: 120000, // 120 seconds timeout (matches backend SseEmitter timeout)
     }
   );
   
@@ -98,9 +98,9 @@ export const scanRepositoryStream = async (
                 error: undefined,
               } as ScanResult);
             } else {
-              reject(new Error('Scan timeout: No results received within 90 seconds'));
+              reject(new Error('Scan timeout: No results received within 120 seconds'));
             }
-          }, 90000);
+          }, 120000); // 120 seconds to match backend timeout
           
           try {
             while (true) {

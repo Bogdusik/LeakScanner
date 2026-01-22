@@ -27,6 +27,11 @@ const App: React.FC = () => {
     loadCurrentRepository();
     checkTokens();
     autoSetupToken(); // Auto-setup token on first launch
+    
+    // Clear badge when popup opens
+    chrome.action.setBadgeText({ text: '' }).catch(() => {
+      // Ignore errors if badge API is not available
+    });
   }, []);
 
   const autoSetupToken = async () => {
@@ -345,7 +350,7 @@ const App: React.FC = () => {
         }
         return currentTimer;
       });
-    }, 50000); // 50 seconds (slightly more than backend timeout of 45s)
+    }, 120000); // 120 seconds (matches backend SseEmitter timeout)
   };
 
   const stopProgress = (instant = false) => {
