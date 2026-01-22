@@ -230,6 +230,58 @@ export const scanRepositoryStream = async (
               // This ensures any complete event in buffer was processed first
               if (done) {
                 clearTimeout(timeoutId);
+                
+                // CRITICAL: Process any remaining data in buffer one more time
+                // Sometimes complete event arrives in the last chunk
+                if (buffer.trim()) {
+                  try {
+                    // Try to parse remaining buffer as SSE event
+                    const lines = buffer.trim().split('\n');
+                    let lastDataStr = '';
+                    let lastEventType = '';
+                    
+                    for (const line of lines) {
+                      if (line.startsWith('data: ')) {
+                        lastDataStr = line.substring(6).trim();
+                      } else if (line.startsWith('event: ')) {
+                        lastEventType = line.substring(7).trim();
+                      }
+                    }
+                    
+                    if (lastDataStr) {
+                      try {
+                        const lastData: ScanProgress = JSON.parse(lastDataStr);
+                        if (!lastData.type && lastEventType) {
+                          lastData.type = lastEventType as any;
+                        }
+                        
+                        // Check if this is a complete event we missed
+                        if (lastData.type === 'complete' || lastEventType === 'complete') {
+                          if (lastData.finalResult) {
+                            finalResult = lastData.finalResult;
+                            console.log('Found complete event in final buffer chunk');
+                          } else if (accumulatedResult) {
+                            finalResult = {
+                              repository: repository,
+                              secrets: accumulatedResult.secrets || [],
+                              vulnerabilities: accumulatedResult.vulnerabilities || [],
+                              outdatedDependencies: accumulatedResult.outdatedDependencies || [],
+                              securityScore: accumulatedResult.securityScore || 100,
+                              lastScanned: new Date().toISOString(),
+                              error: undefined,
+                            } as ScanResult;
+                            console.log('Created result from accumulated data in final buffer');
+                          }
+                        }
+                      } catch (e) {
+                        // Ignore parse errors in final buffer
+                      }
+                    }
+                  } catch (e) {
+                    // Ignore errors processing final buffer
+                  }
+                }
+                
                 // Stream ended - try to use final result or accumulated data
                 if (finalResult) {
                   console.log('Stream ended with final result');
