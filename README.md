@@ -115,6 +115,8 @@ DB_PASSWORD=your_secure_password_here
 
 3. For Docker Compose, the `.env` file will be automatically loaded.
 
+**Подробнее:** См. [ENVIRONMENT_SETUP.md](./ENVIRONMENT_SETUP.md) для полной документации по настройке переменных окружения, токенов и безопасности.
+
 ### Backend
 
 Settings are in `backend/src/main/resources/application.yml`:
@@ -225,10 +227,16 @@ npm run dev
 cd backend
 mvn test
 
-# Extension tests (if added)
+# Run specific test
+mvn test -Dtest=SecretScannerServiceTest
+
+# Extension build
 cd chrome-extension
-npm test
+npm install
+npm run build
 ```
+
+**Подробнее:** См. [TESTING.md](./TESTING.md)
 
 ## 📊 API Endpoints
 
