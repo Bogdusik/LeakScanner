@@ -11,6 +11,10 @@ interface ScanStore {
 export const useScanStore = create<ScanStore>((set) => ({
   scanResult: null,
   isLoading: false,
-  setScanResult: (result) => set({ scanResult: result }),
-  setLoading: (loading) => set({ isLoading: loading }),
+  setScanResult: (result) => {
+    set({ scanResult: result });
+  },
+  setLoading: (loading) => {
+    set({ isLoading: loading });
+  },
 }));
