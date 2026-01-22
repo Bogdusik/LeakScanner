@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,13 +32,37 @@ public class ScanService {
             RepositoryDTO repositoryDTO,
             String githubToken,
             String gitlabToken,
-            String snykToken
+            String snykToken,
+            boolean forceRescan
     ) {
         long startTime = System.currentTimeMillis();
         
         try {
             // Get or create repository
             Repository repository = getOrCreateRepository(repositoryDTO);
+            
+            // Check for recent scan result (within last hour) to avoid duplicate scans
+            // Skip cache check if forceRescan is true
+            if (!forceRescan) {
+                ScanResult recentResult = scanResultRepository
+                        .findTopByRepositoryAndScanStatusOrderByScanDateDesc(repository, ScanResult.ScanStatus.SUCCESS)
+                        .orElse(null);
+                
+                if (recentResult != null && recentResult.getScanDate() != null) {
+                    long hoursSinceLastScan = java.time.Duration.between(
+                            recentResult.getScanDate(), 
+                            LocalDateTime.now()
+                    ).toHours();
+                    
+                    if (hoursSinceLastScan < 1) {
+                        log.info("Returning cached scan result for {} (scanned {} hours ago)", 
+                                repositoryDTO, hoursSinceLastScan);
+                        return scanResultMapper.toDTO(recentResult, repositoryDTO);
+                    }
+                }
+            } else {
+                log.info("Force rescan requested for {}", repositoryDTO);
+            }
             
             // Perform security scan
             SecurityScanResult scanResult = securityScannerService.performScan(
@@ -150,6 +175,158 @@ public class ScanService {
         result.setErrorMessage(errorMessage);
         
         return scanResultRepository.save(result);
+    }
+    
+    @Transactional
+    public void scanRepositoryStream(
+            RepositoryDTO repositoryDTO,
+            String githubToken,
+            String gitlabToken,
+            String snykToken,
+            boolean forceRescan,
+            Consumer<ScanProgressDTO> progressCallback
+    ) {
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            // Get or create repository
+            Repository repository = getOrCreateRepository(repositoryDTO);
+            
+            // Check for recent scan result (within last hour) to avoid duplicate scans
+            // Skip cache check if forceRescan is true
+            if (!forceRescan) {
+                ScanResult recentResult = scanResultRepository
+                        .findTopByRepositoryAndScanStatusOrderByScanDateDesc(repository, ScanResult.ScanStatus.SUCCESS)
+                        .orElse(null);
+                
+                if (recentResult != null && recentResult.getScanDate() != null) {
+                    long hoursSinceLastScan = java.time.Duration.between(
+                            recentResult.getScanDate(), 
+                            LocalDateTime.now()
+                    ).toHours();
+                    
+                    if (hoursSinceLastScan < 1) {
+                        log.info("Returning cached scan result for {} (scanned {} hours ago)", 
+                                repositoryDTO, hoursSinceLastScan);
+                        ScanResultDTO cachedResult = scanResultMapper.toDTO(recentResult, repositoryDTO);
+                        progressCallback.accept(ScanProgressDTO.builder()
+                                .type("complete")
+                                .progress(100)
+                                .status("Completed")
+                                .finalResult(cachedResult)
+                                .build());
+                        return;
+                    }
+                }
+            } else {
+                log.info("Force rescan requested for {}", repositoryDTO);
+            }
+            
+            // Perform security scan with streaming
+            SecurityScanResult scanResult = securityScannerService.performScanStream(
+                    repositoryDTO,
+                    githubToken,
+                    gitlabToken,
+                    snykToken,
+                    progressCallback
+            );
+            
+            // Send progress update before calculating score
+            progressCallback.accept(ScanProgressDTO.builder()
+                    .type("progress")
+                    .progress(92)
+                    .status("Calculating security score...")
+                    .build());
+            
+            // Calculate security score
+            int securityScore = calculateSecurityScore(scanResult);
+            
+            // Send progress update before saving
+            progressCallback.accept(ScanProgressDTO.builder()
+                    .type("progress")
+                    .progress(95)
+                    .status("Saving results...")
+                    .build());
+            
+            // Save scan result (this can be slow, so we show progress)
+            ScanResult savedResult = saveScanResult(
+                    repository,
+                    scanResult,
+                    securityScore,
+                    System.currentTimeMillis() - startTime
+            );
+            
+            // Send progress update before mapping
+            progressCallback.accept(ScanProgressDTO.builder()
+                    .type("progress")
+                    .progress(98)
+                    .status("Finalizing...")
+                    .build());
+            
+            ScanResultDTO finalResult = scanResultMapper.toDTO(savedResult, repositoryDTO);
+            
+            // CRITICAL: Always send complete event - this is what frontend waits for
+            try {
+                progressCallback.accept(ScanProgressDTO.builder()
+                        .type("complete")
+                        .progress(100)
+                        .status("Completed")
+                        .finalResult(finalResult)
+                        .build());
+                log.info("Complete event sent successfully with final result");
+            } catch (Exception e) {
+                log.error("CRITICAL: Failed to send complete event", e);
+                // Try one more time
+                try {
+                    progressCallback.accept(ScanProgressDTO.builder()
+                            .type("complete")
+                            .progress(100)
+                            .status("Completed")
+                            .finalResult(finalResult)
+                            .build());
+                } catch (Exception e2) {
+                    log.error("CRITICAL: Failed to send complete event on retry", e2);
+                    throw new RuntimeException("Failed to send complete event", e2);
+                }
+            }
+            
+        } catch (Exception e) {
+            log.error("Error scanning repository: {}", repositoryDTO, e);
+            
+            // CRITICAL: Always send complete/error event even on failure
+            try {
+                // Save failed scan result
+                Repository repository = getOrCreateRepository(repositoryDTO);
+                ScanResult failedResult = saveFailedScanResult(
+                        repository,
+                        e.getMessage(),
+                        System.currentTimeMillis() - startTime
+                );
+                
+                ScanResultDTO failedDTO = scanResultMapper.toDTO(failedResult, repositoryDTO);
+                progressCallback.accept(ScanProgressDTO.builder()
+                        .type("complete")
+                        .progress(100)
+                        .status("Failed")
+                        .message("Scan failed: " + e.getMessage())
+                        .finalResult(failedDTO)
+                        .build());
+                log.info("Error event sent successfully as complete event");
+            } catch (Exception callbackError) {
+                log.error("CRITICAL: Failed to send error event to callback", callbackError);
+                // Last resort: send minimal error event
+                try {
+                    progressCallback.accept(ScanProgressDTO.builder()
+                            .type("error")
+                            .progress(0)
+                            .status("Failed")
+                            .message("Scan failed: " + e.getMessage())
+                            .build());
+                } catch (Exception finalError) {
+                    log.error("CRITICAL: Completely failed to send any event", finalError);
+                }
+            }
+        }
     }
     
     private int calculateSecurityScore(SecurityScanResult scanResult) {
