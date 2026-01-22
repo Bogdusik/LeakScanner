@@ -57,7 +57,7 @@ public class GitHubService {
                     .uri(url)
                     .retrieve()
                     .bodyToMono(Map.class)
-                    .timeout(Duration.ofSeconds(15))
+                    .timeout(Duration.ofSeconds(20)) // Increased timeout
                     .block();
             
             if (response != null && response.containsKey("tree")) {
@@ -94,10 +94,12 @@ public class GitHubService {
                                 log.debug("Skipping large file content: {} ({} bytes)", path, content.length());
                                 continue;
                             }
-                            files.add(new RepositoryFile(path, content));
-                            fileCount++;
+                            if (content != null) {
+                                files.add(new RepositoryFile(path, content));
+                                fileCount++;
+                            }
                         } catch (Exception e) {
-                            log.warn("Error getting content for file {}: {}", path, e.getMessage());
+                            log.warn("Error getting content for file {}: {} - skipping file", path, e.getMessage());
                             // Continue with next file instead of failing completely
                         }
                     }
@@ -119,17 +121,29 @@ public class GitHubService {
         try {
             WebClient webClient = createWebClient(token);
             
-            String url = String.format("%s/repos/%s/%s/contents/%s", 
-                    githubBaseUrl, repositoryDTO.getOwner(), repositoryDTO.getName(), filePath);
+            // Properly encode the file path to handle spaces and special characters
+            // GitHub API requires path segments to be encoded, but slashes should remain
+            String[] pathSegments = filePath.split("/");
+            StringBuilder encodedPath = new StringBuilder();
+            for (int i = 0; i < pathSegments.length; i++) {
+                if (i > 0) encodedPath.append("/");
+                encodedPath.append(java.net.URLEncoder.encode(pathSegments[i], java.nio.charset.StandardCharsets.UTF_8)
+                        .replace("+", "%20")); // GitHub API expects %20 for spaces
+            }
+            
+            // Use URI builder to properly construct the URL
+            String uri = String.format("/repos/%s/%s/contents/%s", 
+                    repositoryDTO.getOwner(), repositoryDTO.getName(), encodedPath.toString());
+            
             if (ref != null && !ref.isEmpty()) {
-                url += "?ref=" + ref;
+                uri += "?ref=" + java.net.URLEncoder.encode(ref, java.nio.charset.StandardCharsets.UTF_8);
             }
             
             Map<String, Object> response = webClient.get()
-                    .uri(url)
+                    .uri(uri)
                     .retrieve()
                     .bodyToMono(Map.class)
-                    .timeout(Duration.ofSeconds(10))
+                    .timeout(Duration.ofSeconds(15)) // Increased timeout
                     .block();
             
             if (response != null && response.containsKey("content")) {
@@ -166,8 +180,10 @@ public class GitHubService {
                 }
             }
             
+        } catch (java.lang.IllegalArgumentException e) {
+            log.error("Illegal characters in file path {}: {}", filePath, e.getMessage());
         } catch (Exception e) {
-            log.error("Error getting file content from GitHub", e);
+            log.error("Error getting file content from GitHub for file {}: {}", filePath, e.getMessage());
         }
         
         return null;
@@ -182,7 +198,7 @@ public class GitHubService {
                     .uri(url)
                     .retrieve()
                     .bodyToMono(Map.class)
-                    .timeout(Duration.ofSeconds(10))
+                    .timeout(Duration.ofSeconds(15)) // Increased timeout
                     .block();
             
             if (repoInfo != null && repoInfo.containsKey("default_branch")) {
@@ -204,7 +220,7 @@ public class GitHubService {
                     .uri(url)
                     .retrieve()
                     .bodyToMono(Map.class)
-                    .timeout(Duration.ofSeconds(5))
+                    .timeout(Duration.ofSeconds(10)) // Increased timeout
                     .block();
             
             if (response != null && response.containsKey("tree")) {

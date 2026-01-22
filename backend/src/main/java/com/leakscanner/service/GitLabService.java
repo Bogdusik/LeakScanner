@@ -85,18 +85,28 @@ public class GitLabService {
             String projectId = getProjectId(repositoryDTO, token);
             if (projectId == null) return null;
             
-            String url = String.format("%s/projects/%s/repository/files/%s/raw", 
-                    gitlabBaseUrl, projectId, java.net.URLEncoder.encode(filePath, java.nio.charset.StandardCharsets.UTF_8));
+            // Properly encode the file path - GitLab API requires URL encoding
+            // Encode each path segment separately to preserve slashes
+            String[] pathSegments = filePath.split("/");
+            StringBuilder encodedPath = new StringBuilder();
+            for (int i = 0; i < pathSegments.length; i++) {
+                if (i > 0) encodedPath.append("%2F"); // URL-encoded slash
+                encodedPath.append(java.net.URLEncoder.encode(pathSegments[i], java.nio.charset.StandardCharsets.UTF_8)
+                        .replace("+", "%20")); // Use %20 for spaces
+            }
+            
+            String uri = String.format("/projects/%s/repository/files/%s/raw", 
+                    projectId, encodedPath.toString());
             
             return webClient.get()
-                    .uri(url)
+                    .uri(uri)
                     .retrieve()
                     .bodyToMono(String.class)
-                    .timeout(Duration.ofSeconds(10))
+                    .timeout(Duration.ofSeconds(15)) // Increased timeout
                     .block();
             
         } catch (Exception e) {
-            log.error("Error getting file content from GitLab", e);
+            log.error("Error getting file content from GitLab for file {}: {}", filePath, e.getMessage());
         }
         
         return null;
