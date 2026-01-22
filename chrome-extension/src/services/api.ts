@@ -32,7 +32,7 @@ export const scanRepository = async (repository: Repository): Promise<ScanResult
     repository,
     { 
       headers,
-      timeout: 120000, // 2 minutes timeout
+      timeout: 50000, // 50 seconds timeout (matches backend + safety margin)
     }
   );
   

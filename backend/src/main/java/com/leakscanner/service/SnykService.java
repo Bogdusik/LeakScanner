@@ -2,7 +2,6 @@ package com.leakscanner.service;
 
 import com.leakscanner.dto.RepositoryDTO;
 import com.leakscanner.model.Vulnerability;
-import com.leakscanner.service.RepositoryFile;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,7 +10,6 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -112,10 +110,6 @@ public class SnykService {
         try {
             // Snyk test API for npm packages
             // Note: Snyk API requires organization ID, but we can use test endpoint
-            Map<String, Object> request = Map.of(
-                    "targetFile", "package.json",
-                    "packageManager", "npm"
-            );
             
             // For Snyk, we need to use the test endpoint with file content
             // This is a simplified version - full implementation would require Snyk CLI or proper API setup
