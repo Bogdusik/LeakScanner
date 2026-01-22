@@ -27,7 +27,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       console.error('Error storing repository:', error);
       sendResponse({ success: false, error: error.message });
     });
-    return true;
+    return true; // Keep channel open for async response
   }
   
   if (message.action === 'openPopup') {
@@ -47,10 +47,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return true;
 });
 
-// Clear badge when popup is opened
-chrome.action.onClicked?.addListener(() => {
-  chrome.action.setBadgeText({ text: '' });
-});
+// Clear badge when popup is opened (only if popup is not defined, otherwise it won't fire)
+// Note: This only works if popup is not set in manifest.json
+// For popup-based extensions, badge is cleared in App.tsx when component mounts
 
 // Listen for tab updates to detect repository pages
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
