@@ -1,8 +1,7 @@
 -- LeakScanner Database Schema
 
-CREATE DATABASE IF NOT EXISTS leakscanner;
-
-\c leakscanner;
+-- Database is already created by POSTGRES_DB environment variable
+-- This script runs in the context of the leakscanner database
 
 -- Repositories table
 CREATE TABLE IF NOT EXISTS repositories (

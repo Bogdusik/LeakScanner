@@ -39,6 +39,24 @@ public class ScanService {
             // Get or create repository
             Repository repository = getOrCreateRepository(repositoryDTO);
             
+            // Check for recent scan result (within last hour) to avoid duplicate scans
+            ScanResult recentResult = scanResultRepository
+                    .findTopByRepositoryAndScanStatusOrderByScanDateDesc(repository, ScanResult.ScanStatus.SUCCESS)
+                    .orElse(null);
+            
+            if (recentResult != null && recentResult.getScanDate() != null) {
+                long hoursSinceLastScan = java.time.Duration.between(
+                        recentResult.getScanDate(), 
+                        LocalDateTime.now()
+                ).toHours();
+                
+                if (hoursSinceLastScan < 1) {
+                    log.info("Returning cached scan result for {} (scanned {} hours ago)", 
+                            repositoryDTO, hoursSinceLastScan);
+                    return scanResultMapper.toDTO(recentResult, repositoryDTO);
+                }
+            }
+            
             // Perform security scan
             SecurityScanResult scanResult = securityScannerService.performScan(
                     repositoryDTO,
