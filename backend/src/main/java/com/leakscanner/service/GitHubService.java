@@ -64,12 +64,12 @@ public class GitHubService {
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> tree = (List<Map<String, Object>>) response.get("tree");
                 
-                int maxFiles = 50; // Reduced to 50 files to prevent hanging
+                int maxFiles = 30; // Further reduced for faster scanning (30 files max)
                 int fileCount = 0;
                 
                 for (Map<String, Object> item : tree) {
                     if (fileCount >= maxFiles) {
-                        log.warn("Reached file limit ({}), stopping file collection", maxFiles);
+                        log.debug("Reached file limit ({}), stopping file collection", maxFiles);
                         break;
                     }
                     

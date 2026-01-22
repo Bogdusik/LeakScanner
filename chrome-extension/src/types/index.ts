@@ -37,3 +37,14 @@ export interface ScanResult {
   lastScanned: string;
   error?: string;
 }
+
+export interface ScanProgress {
+  type: 'secrets' | 'vulnerabilities' | 'dependencies' | 'progress' | 'complete' | 'error';
+  secrets?: SecretLeak[];
+  vulnerabilities?: Vulnerability[];
+  outdatedDependencies?: OutdatedDependency[];
+  progress?: number;
+  status?: string;
+  message?: string;
+  finalResult?: ScanResult;
+}

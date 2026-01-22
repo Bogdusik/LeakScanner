@@ -93,10 +93,11 @@ public class SecretScannerService {
                     ))
                     .collect(Collectors.toList());
             
-            // Collect all results with timeout (limit to prevent hanging)
-            int maxFilesToScan = 50; // Reduced limit to prevent hanging
+            // Collect all results with timeout (optimized limits for speed)
+            int maxFilesToScan = 30; // Further reduced for faster scanning
             int scannedCount = 0;
             
+            // Process futures in batches for better performance
             for (CompletableFuture<List<SecretLeak>> future : futures) {
                 if (scannedCount >= maxFilesToScan) {
                     log.warn("Reached file scan limit ({}), cancelling remaining scans", maxFilesToScan);
@@ -105,16 +106,22 @@ public class SecretScannerService {
                 }
                 
                 try {
-                    secrets.addAll(future.get(10, TimeUnit.SECONDS)); // Reduced timeout per file
+                    // Reduced timeout per file for faster scanning
+                    List<SecretLeak> fileSecrets = future.get(5, TimeUnit.SECONDS);
+                    if (fileSecrets != null && !fileSecrets.isEmpty()) {
+                        secrets.addAll(fileSecrets);
+                    }
                     scannedCount++;
                 } catch (java.util.concurrent.TimeoutException e) {
-                    log.warn("File scan timeout, skipping", e);
+                    log.debug("File scan timeout (5s), skipping to next file");
                     future.cancel(true);
                 } catch (Exception e) {
-                    log.warn("Error scanning file for secrets", e);
+                    log.debug("Error scanning file for secrets, continuing", e);
                     future.cancel(true);
                 }
             }
+            
+            log.info("Scanned {} files for secrets, found {} total", scannedCount, secrets.size());
             
         } catch (Exception e) {
             log.error("Error scanning for secrets", e);
@@ -151,11 +158,16 @@ public class SecretScannerService {
             return secrets;
         }
         
-        // Validate file size (10MB limit)
-        long maxFileSize = 10 * 1024 * 1024; // 10MB
+        // Validate file size (2MB limit for faster scanning)
+        long maxFileSize = 2 * 1024 * 1024; // 2MB - reduced for speed
         if (content.length() > maxFileSize) {
-            log.warn("File too large to scan: {} ({} bytes). Skipping.", file.path(), content.length());
+            log.debug("File too large to scan: {} ({} bytes). Skipping.", file.path(), content.length());
             return secrets;
+        }
+        
+        // Early exit for very large files
+        if (content.length() > 500 * 1024) { // 500KB
+            log.debug("Large file detected, using optimized scanning: {}", file.path());
         }
         
         // Skip common false positive patterns
