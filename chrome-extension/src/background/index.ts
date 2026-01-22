@@ -42,7 +42,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     // Try to open popup (may not work programmatically, user needs to click icon)
     chrome.action.openPopup().catch(() => {
       // Popup can't be opened programmatically, user must click icon
-      console.log('Please click the extension icon to open popup');
     });
   }
   return true;

@@ -8,7 +8,11 @@ import { getCurrentRepository } from '../utils/repository';
 import { Repository } from '../types';
 
 const App: React.FC = () => {
-  const { scanResult, isLoading, setScanResult, setLoading } = useScanStore();
+  // Use selector to ensure component re-renders on state changes
+  const scanResult = useScanStore((state) => state.scanResult);
+  const isLoading = useScanStore((state) => state.isLoading);
+  const setScanResult = useScanStore((state) => state.setScanResult);
+  const setLoading = useScanStore((state) => state.setLoading);
   const [showSettings, setShowSettings] = useState(false);
   const [currentRepo, setCurrentRepo] = useState<Repository | null>(null);
   const [hasTokens, setHasTokens] = useState<{github: boolean, gitlab: boolean, snyk: boolean}>({github: false, gitlab: false, snyk: false});
@@ -70,16 +74,31 @@ const App: React.FC = () => {
   };
 
   const handleScan = async () => {
-    if (!currentRepo) return;
+    if (!currentRepo) {
+      return;
+    }
 
+    // Prevent multiple simultaneous scans
+    if (isLoading) {
+      return;
+    }
+    
+    // Set loading state immediately and synchronously
     setLoading(true);
+    
     startProgress();
+    let scanCompleted = false;
+    
     try {
       setScanProgress({ percent: 5, status: 'Collecting repository metadata...' });
       const result = await scanRepository(currentRepo);
-      setScanResult(result);
+      
+      // Ensure progress reaches 100% when result arrives
       setScanProgress({ percent: 100, status: 'Completed' });
-      stopProgress(true);
+      setScanResult(result);
+      // Force a small delay to ensure state update
+      await new Promise(resolve => setTimeout(resolve, 100));
+      scanCompleted = true;
       
       // Cache result
       const cacheKey = `${currentRepo.platform}:${currentRepo.owner}/${currentRepo.name}`;
@@ -112,27 +131,48 @@ const App: React.FC = () => {
         error: errorMessage,
       });
       setScanProgress({ percent: 100, status: 'Error' });
-      stopProgress(true);
+      scanCompleted = true;
     } finally {
       setLoading(false);
-      stopProgress(true);
+      // Always stop progress and ensure it's at 100% if completed
+      if (scanCompleted) {
+        stopProgress(true);
+      } else {
+        // If somehow we got here without completion, force it
+        setScanProgress({ percent: 100, status: 'Completed' });
+        stopProgress(true);
+      }
     }
   };
 
   const startProgress = () => {
-    if (progressTimer) clearInterval(progressTimer);
+    if (progressTimer) {
+      clearInterval(progressTimer);
+      setProgressTimer(null);
+    }
     setScanProgress({ percent: 5, status: 'Collecting repository metadata...' });
+    let currentPercent = 5;
     const timer = setInterval(() => {
       setScanProgress((prev) => {
-        const next = Math.min(prev.percent + Math.random() * 7, 90);
+        // Gradually increase progress, but cap at 95% to leave room for completion
+        currentPercent = Math.min(currentPercent + Math.random() * 5, 95);
         let status = prev.status;
-        if (next < 30) status = 'Scanning secrets...';
-        else if (next < 60) status = 'Analyzing vulnerabilities...';
-        else if (next < 90) status = 'Checking dependencies...';
-        return { percent: next, status };
+        if (currentPercent < 30) status = 'Scanning secrets...';
+        else if (currentPercent < 60) status = 'Analyzing vulnerabilities...';
+        else if (currentPercent < 85) status = 'Checking dependencies...';
+        else status = 'Finalizing results...';
+        return { percent: currentPercent, status };
       });
-    }, 700);
+    }, 500);
     setProgressTimer(timer);
+    
+    // Safety timeout: if scan takes too long, force completion (50 seconds)
+    setTimeout(() => {
+      if (progressTimer === timer) {
+        setScanProgress({ percent: 100, status: 'Completed' });
+        stopProgress(true);
+      }
+    }, 50000); // 50 seconds (slightly more than backend timeout of 45s)
   };
 
   const stopProgress = (instant = false) => {
@@ -272,8 +312,12 @@ const App: React.FC = () => {
 
             {/* Scan Button - ROG RGB Style */}
             <button
-              onClick={handleScan}
-              disabled={isLoading}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleScan();
+              }}
+              disabled={isLoading || !currentRepo}
               className="w-full bg-gradient-to-r from-rog-cyan via-rog-purple to-rog-pink hover:from-rog-cyanDark hover:via-rog-purpleDark hover:to-rog-pinkDark disabled:from-gray-600 disabled:via-gray-600 disabled:to-gray-600 text-white font-bold py-2.5 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98] text-sm uppercase tracking-wide"
             >
               {isLoading ? (
@@ -290,7 +334,7 @@ const App: React.FC = () => {
             </button>
 
             {/* Security Score - ROG Style with animation */}
-            {scanResult && (
+            {scanResult ? (
               <div className="p-3 bg-rog-darkGray border border-rog-cyan/30 rounded-xl rog-glow-cyan animate-fadeIn">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-semibold text-rog-cyan uppercase tracking-wide">Security Score</span>
@@ -320,7 +364,7 @@ const App: React.FC = () => {
                   </p>
                 )}
               </div>
-            )}
+            ) : null}
 
             {/* Error Message - ROG Style */}
             {scanResult?.error && (

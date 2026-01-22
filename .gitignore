@@ -12,6 +12,7 @@ Thumbs.db
 # Logs
 *.log
 logs/
+backend.log
 
 # Dependencies
 node_modules/
@@ -22,6 +23,7 @@ dist/
 .env
 .env.local
 .env.*.local
+!.env.example
 
 # Build
 build/
