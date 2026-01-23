@@ -26,8 +26,14 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
   };
 
   const handleSave = async () => {
+    // Validate API URL
+    if (apiUrl && !apiUrl.match(/^https?:\/\/.+/)) {
+      alert('Invalid API URL format. Please use http:// or https://');
+      return;
+    }
+    
     await chrome.storage.sync.set({
-      apiUrl,
+      apiUrl: apiUrl || 'http://localhost:8080',
       githubToken,
       gitlabToken,
     });
