@@ -42,11 +42,14 @@ A fully functional Chrome extension for scanning GitHub/GitLab repositories for 
 
 ### Prerequisites
 
-- Node.js 18+ and npm
-- Java 17+
-- Maven 3.9+
-- Docker and Docker Compose
-- PostgreSQL 15+ (or use Docker)
+- **Docker Desktop** (рекомендуется для быстрого старта)
+- ИЛИ:
+  - Node.js 18+ and npm
+  - Java 17+
+  - Maven 3.9+
+  - PostgreSQL 15+
+
+**📖 Подробная инструкция:** См. [INSTALLATION.md](./INSTALLATION.md) для пошаговой установки.
 
 ### 1. Clone Repository
 
@@ -299,6 +302,12 @@ mvn clean package
 ### AWS Lambda
 
 See `aws-lambda/README.md` for Lambda function deployment instructions.
+
+## 🔧 Troubleshooting
+
+Если у вас возникли проблемы при установке или использовании:
+- 📖 См. [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) для решения частых проблем
+- 📖 См. [INSTALLATION.md](./INSTALLATION.md) для подробной инструкции по установке
 
 ## 🤝 Contributing
 
