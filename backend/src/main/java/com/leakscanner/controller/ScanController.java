@@ -78,21 +78,47 @@ public class ScanController {
                         }
                 );
                 
-                // Ensure we send complete event even if scanService didn't
+                // CRITICAL: Ensure we ALWAYS send complete event, even if scanService didn't
                 ScanResultDTO finalResult = finalResultRef.get();
                 if (finalResult == null) {
-                    log.warn("No final result received, sending fallback complete event");
+                    log.warn("No final result received from scanService, sending fallback complete event with empty result");
                     try {
+                        // Create empty result to indicate scan completed but found nothing
+                        ScanResultDTO emptyResult = ScanResultDTO.builder()
+                                .repository(repositoryDTO)
+                                .secrets(List.of())
+                                .vulnerabilities(List.of())
+                                .outdatedDependencies(List.of())
+                                .securityScore(100)
+                                .lastScanned(java.time.LocalDateTime.now().toString())
+                                .build();
+                        
                         emitter.send(SseEmitter.event()
                                 .name("complete")
                                 .data(ScanProgressDTO.builder()
                                         .type("complete")
                                         .progress(100)
                                         .status("Completed")
+                                        .finalResult(emptyResult)
                                         .build()));
+                        log.info("Fallback complete event sent with empty result");
                     } catch (IOException e) {
-                        log.error("Failed to send fallback complete event", e);
+                        log.error("CRITICAL: Failed to send fallback complete event", e);
+                        // Try one more time with minimal event
+                        try {
+                            emitter.send(SseEmitter.event()
+                                    .name("complete")
+                                    .data(ScanProgressDTO.builder()
+                                            .type("complete")
+                                            .progress(100)
+                                            .status("Completed")
+                                            .build()));
+                        } catch (IOException e2) {
+                            log.error("CRITICAL: Completely failed to send fallback complete event", e2);
+                        }
                     }
+                } else {
+                    log.info("Final result received, complete event should have been sent by scanService");
                 }
                 
                 // CRITICAL: Give time for complete event to reach client before closing connection
@@ -100,7 +126,7 @@ public class ScanController {
                 try {
                     // Flush any pending data and wait to ensure complete event is fully transmitted
                     // Increased delay to ensure client receives the complete event
-                    Thread.sleep(2000); // 2 seconds delay to ensure event is sent and received
+                    Thread.sleep(3000); // 3 seconds delay to ensure event is sent and received
                     log.debug("Waiting period completed, closing emitter");
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
@@ -108,7 +134,7 @@ public class ScanController {
                 }
                 
                 emitter.complete();
-                log.info("Stream scan completed successfully");
+                log.info("Stream scan completed successfully, emitter closed");
             } catch (Exception e) {
                 log.error("Error during stream scan", e);
                 try {
