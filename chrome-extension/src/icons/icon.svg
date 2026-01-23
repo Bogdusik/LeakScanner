@@ -1,6 +1,6 @@
 <svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <!-- Shield gradient - более яркий и контрастный -->
+    <!-- Shield gradient - brighter and more contrast -->
     <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" style="stop-color:#00f2fe;stop-opacity:1" />
       <stop offset="50%" style="stop-color:#8b5cf6;stop-opacity:1" />
@@ -17,23 +17,23 @@
     </filter>
   </defs>
   
-  <!-- Фон - темный круг, заполняющий почти все пространство -->
+  <!-- Background - dark circle filling almost all space -->
   <circle cx="64" cy="64" r="62" fill="#1a1a2e"/>
   
-  <!-- Основной щит - больше и ближе к краям -->
+  <!-- Main shield - larger and closer to edges -->
   <path d="M 64 12 L 32 24 L 32 56 C 32 80 46 98 64 108 C 82 98 96 80 96 56 L 96 24 Z" 
         fill="url(#shieldGradient)" 
         opacity="1"
         filter="url(#glow)"/>
   
-  <!-- Внутренний контур щита для глубины -->
+  <!-- Inner shield contour for depth -->
   <path d="M 64 18 L 38 28 L 38 56 C 38 76 50 92 64 100 C 78 92 90 76 90 56 L 90 28 Z" 
         fill="none" 
         stroke="#ffffff" 
         stroke-width="2" 
         opacity="0.4"/>
   
-  <!-- Галочка безопасности - более толстая и заметная -->
+  <!-- Security checkmark - thicker and more visible -->
   <path d="M 48 58 L 58 68 L 80 46" 
         stroke="#ffffff" 
         stroke-width="5" 
@@ -42,7 +42,7 @@
         fill="none"
         opacity="1"/>
   
-  <!-- Дополнительный акцент - маленькая иконка сканирования в углу -->
+  <!-- Additional accent - small scanning icon in corner -->
   <circle cx="90" cy="38" r="6" fill="#00f2fe" opacity="0.9">
     <circle cx="90" cy="38" r="3" fill="#ffffff"/>
   </circle>
