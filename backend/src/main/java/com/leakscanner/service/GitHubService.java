@@ -169,24 +169,29 @@ public class GitHubService {
         try {
             WebClient webClient = createWebClient(token);
             
-            // Use WebClient's URI builder which handles encoding automatically
-            // Don't manually encode - WebClient will do it correctly
-            var uriSpec = webClient.get()
-                    .uri(uriBuilder -> {
-                        var built = uriBuilder.path("/repos/{owner}/{repo}/contents/{path}")
-                                .build(repositoryDTO.getOwner(), 
-                                       repositoryDTO.getName(), 
-                                       filePath); // WebClient will encode this automatically
-                        if (ref != null && !ref.isEmpty()) {
-                            // Rebuild with query parameter
-                            return uriBuilder.path("/repos/{owner}/{repo}/contents/{path}")
-                                    .queryParam("ref", ref)
-                                    .build(repositoryDTO.getOwner(), 
-                                           repositoryDTO.getName(), 
-                                           filePath);
-                        }
-                        return built;
-                    });
+            // Build URI manually to avoid issues with path variables containing slashes
+            // GitHub API expects path segments to be properly encoded
+            // Encode each path segment separately, preserving slashes
+            String[] pathSegments = filePath.split("/");
+            StringBuilder encodedPath = new StringBuilder();
+            for (int i = 0; i < pathSegments.length; i++) {
+                if (i > 0) encodedPath.append("/");
+                encodedPath.append(java.net.URLEncoder.encode(pathSegments[i], java.nio.charset.StandardCharsets.UTF_8)
+                        .replace("+", "%20")); // GitHub expects %20 for spaces
+            }
+            
+            // Build the full path manually
+            String fullPath = String.format("/repos/%s/%s/contents/%s",
+                    repositoryDTO.getOwner(),
+                    repositoryDTO.getName(),
+                    encodedPath.toString());
+            
+            // Add ref parameter if provided
+            if (ref != null && !ref.isEmpty()) {
+                fullPath += "?ref=" + java.net.URLEncoder.encode(ref, java.nio.charset.StandardCharsets.UTF_8);
+            }
+            
+            var uriSpec = webClient.get().uri(fullPath);
             
             Map<String, Object> response = uriSpec
                     .retrieve()
