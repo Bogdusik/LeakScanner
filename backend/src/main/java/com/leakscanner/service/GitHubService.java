@@ -5,8 +5,11 @@ import com.leakscanner.service.RepositoryFile;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -56,6 +59,36 @@ public class GitHubService {
             Map<String, Object> response = webClient.get()
                     .uri(url)
                     .retrieve()
+                    .onStatus(status -> status.is4xxClientError(), clientResponse -> {
+                        log.warn("GitHub API client error {} for tree request: {}/{}", 
+                                clientResponse.statusCode(), repositoryDTO.getOwner(), repositoryDTO.getName());
+                        return clientResponse.bodyToMono(String.class)
+                                .map(body -> {
+                                    HttpStatus status = HttpStatus.resolve(clientResponse.statusCode().value());
+                                    return new WebClientResponseException(
+                                            clientResponse.statusCode().value(),
+                                            status != null ? status.getReasonPhrase() : "Unknown",
+                                            clientResponse.headers().asHttpHeaders(),
+                                            body != null ? body.getBytes() : null,
+                                            null
+                                    );
+                                });
+                    })
+                    .onStatus(status -> status.is5xxServerError(), clientResponse -> {
+                        log.error("GitHub API server error {} for tree request: {}/{}", 
+                                clientResponse.statusCode(), repositoryDTO.getOwner(), repositoryDTO.getName());
+                        return clientResponse.bodyToMono(String.class)
+                                .map(body -> {
+                                    HttpStatus status = HttpStatus.resolve(clientResponse.statusCode().value());
+                                    return new WebClientResponseException(
+                                            clientResponse.statusCode().value(),
+                                            status != null ? status.getReasonPhrase() : "Unknown",
+                                            clientResponse.headers().asHttpHeaders(),
+                                            body != null ? body.getBytes() : null,
+                                            null
+                                    );
+                                });
+                    })
                     .bodyToMono(Map.class)
                     .timeout(Duration.ofSeconds(20)) // Increased timeout
                     .block();
@@ -106,8 +139,23 @@ public class GitHubService {
                 }
             }
             
+        } catch (WebClientResponseException e) {
+            if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
+                log.error("Repository not found on GitHub: {}/{} (404) - Check repository name and owner", 
+                        repositoryDTO.getOwner(), repositoryDTO.getName());
+            } else if (e.getStatusCode() == HttpStatus.FORBIDDEN) {
+                log.error("Access forbidden to repository on GitHub: {}/{} (403) - Repository may be private. Provide a valid GitHub token.", 
+                        repositoryDTO.getOwner(), repositoryDTO.getName());
+            } else if (e.getStatusCode() == HttpStatus.UNAUTHORIZED) {
+                log.error("Unauthorized access to repository on GitHub: {}/{} (401) - GitHub token is invalid or expired", 
+                        repositoryDTO.getOwner(), repositoryDTO.getName());
+            } else {
+                log.error("HTTP error getting repository files from GitHub: {}/{} - Status: {} {}", 
+                        repositoryDTO.getOwner(), repositoryDTO.getName(), e.getStatusCode(), e.getMessage());
+            }
         } catch (Exception e) {
-            log.error("Error getting repository files from GitHub", e);
+            log.error("Error getting repository files from GitHub: {}/{} - {}", 
+                    repositoryDTO.getOwner(), repositoryDTO.getName(), e.getMessage(), e);
         }
         
         return files;
@@ -142,6 +190,36 @@ public class GitHubService {
             
             Map<String, Object> response = uriSpec
                     .retrieve()
+                    .onStatus(status -> status.is4xxClientError(), clientResponse -> {
+                        log.debug("GitHub API client error {} for file {}: {}/{}", 
+                                clientResponse.statusCode(), filePath, repositoryDTO.getOwner(), repositoryDTO.getName());
+                        return clientResponse.bodyToMono(String.class)
+                                .map(body -> {
+                                    HttpStatus status = HttpStatus.resolve(clientResponse.statusCode().value());
+                                    return new WebClientResponseException(
+                                            clientResponse.statusCode().value(),
+                                            status != null ? status.getReasonPhrase() : "Unknown",
+                                            clientResponse.headers().asHttpHeaders(),
+                                            body != null ? body.getBytes() : null,
+                                            null
+                                    );
+                                });
+                    })
+                    .onStatus(status -> status.is5xxServerError(), clientResponse -> {
+                        log.warn("GitHub API server error {} for file {}: {}/{}", 
+                                clientResponse.statusCode(), filePath, repositoryDTO.getOwner(), repositoryDTO.getName());
+                        return clientResponse.bodyToMono(String.class)
+                                .map(body -> {
+                                    HttpStatus status = HttpStatus.resolve(clientResponse.statusCode().value());
+                                    return new WebClientResponseException(
+                                            clientResponse.statusCode().value(),
+                                            status != null ? status.getReasonPhrase() : "Unknown",
+                                            clientResponse.headers().asHttpHeaders(),
+                                            body != null ? body.getBytes() : null,
+                                            null
+                                    );
+                                });
+                    })
                     .bodyToMono(Map.class)
                     .timeout(Duration.ofSeconds(15)) // Increased timeout
                     .block();
@@ -180,6 +258,18 @@ public class GitHubService {
                 }
             }
             
+        } catch (WebClientResponseException e) {
+            // Handle specific HTTP errors
+            if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
+                log.debug("File not found on GitHub: {} (404)", filePath);
+            } else if (e.getStatusCode() == HttpStatus.FORBIDDEN) {
+                log.warn("Access forbidden to file on GitHub: {} (403) - Repository may be private or token invalid", filePath);
+            } else if (e.getStatusCode() == HttpStatus.UNAUTHORIZED) {
+                log.warn("Unauthorized access to file on GitHub: {} (401) - Token may be invalid or expired", filePath);
+            } else {
+                log.warn("HTTP error getting file content from GitHub for file {}: {} {}", 
+                        filePath, e.getStatusCode(), e.getMessage());
+            }
         } catch (java.lang.IllegalArgumentException e) {
             log.error("Illegal characters in file path {}: {}", filePath, e.getMessage());
         } catch (Exception e) {
@@ -197,12 +287,56 @@ public class GitHubService {
             Map<String, Object> repoInfo = webClient.get()
                     .uri(url)
                     .retrieve()
+                    .onStatus(status -> status.is4xxClientError(), clientResponse -> {
+                        log.warn("GitHub API client error {} for repo info: {}/{} - Repository may not exist or be private", 
+                                clientResponse.statusCode(), repositoryDTO.getOwner(), repositoryDTO.getName());
+                        return clientResponse.bodyToMono(String.class)
+                                .map(body -> {
+                                    HttpStatus status = HttpStatus.resolve(clientResponse.statusCode().value());
+                                    return new WebClientResponseException(
+                                            clientResponse.statusCode().value(),
+                                            status != null ? status.getReasonPhrase() : "Unknown",
+                                            clientResponse.headers().asHttpHeaders(),
+                                            body != null ? body.getBytes() : null,
+                                            null
+                                    );
+                                });
+                    })
+                    .onStatus(status -> status.is5xxServerError(), clientResponse -> {
+                        log.error("GitHub API server error {} for repo info: {}/{}", 
+                                clientResponse.statusCode(), repositoryDTO.getOwner(), repositoryDTO.getName());
+                        return clientResponse.bodyToMono(String.class)
+                                .map(body -> {
+                                    HttpStatus status = HttpStatus.resolve(clientResponse.statusCode().value());
+                                    return new WebClientResponseException(
+                                            clientResponse.statusCode().value(),
+                                            status != null ? status.getReasonPhrase() : "Unknown",
+                                            clientResponse.headers().asHttpHeaders(),
+                                            body != null ? body.getBytes() : null,
+                                            null
+                                    );
+                                });
+                    })
                     .bodyToMono(Map.class)
                     .timeout(Duration.ofSeconds(15)) // Increased timeout
                     .block();
             
             if (repoInfo != null && repoInfo.containsKey("default_branch")) {
                 return (String) repoInfo.get("default_branch");
+            }
+        } catch (WebClientResponseException e) {
+            if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
+                log.debug("Repository not found on GitHub: {}/{} (404)", 
+                        repositoryDTO.getOwner(), repositoryDTO.getName());
+            } else if (e.getStatusCode() == HttpStatus.FORBIDDEN) {
+                log.warn("Access forbidden to repository on GitHub: {}/{} (403) - Repository may be private or token invalid", 
+                        repositoryDTO.getOwner(), repositoryDTO.getName());
+            } else if (e.getStatusCode() == HttpStatus.UNAUTHORIZED) {
+                log.warn("Unauthorized access to repository on GitHub: {}/{} (401) - Token may be invalid or expired", 
+                        repositoryDTO.getOwner(), repositoryDTO.getName());
+            } else {
+                log.debug("HTTP error getting default branch for {}/{}: {} {}", 
+                        repositoryDTO.getOwner(), repositoryDTO.getName(), e.getStatusCode(), e.getMessage());
             }
         } catch (Exception e) {
             log.debug("Error getting default branch for {}/{}: {}", 
@@ -219,6 +353,50 @@ public class GitHubService {
             Map<String, Object> response = webClient.get()
                     .uri(url)
                     .retrieve()
+                    .onStatus(status -> status.is4xxClientError(), clientResponse -> {
+                        // 404 is expected for non-existent branches, so we don't log it as error
+                        if (clientResponse.statusCode() == HttpStatus.NOT_FOUND) {
+                            return clientResponse.bodyToMono(String.class)
+                                    .map(body -> {
+                                        HttpStatus status = HttpStatus.resolve(clientResponse.statusCode().value());
+                                        return new WebClientResponseException(
+                                                clientResponse.statusCode().value(),
+                                                status != null ? status.getReasonPhrase() : "Unknown",
+                                                clientResponse.headers().asHttpHeaders(),
+                                                body != null ? body.getBytes() : null,
+                                                null
+                                        );
+                                    });
+                        }
+                        log.debug("GitHub API client error {} for branch {}: {}/{}", 
+                                clientResponse.statusCode(), branchName, repositoryDTO.getOwner(), repositoryDTO.getName());
+                        return clientResponse.bodyToMono(String.class)
+                                .map(body -> {
+                                    HttpStatus status = HttpStatus.resolve(clientResponse.statusCode().value());
+                                    return new WebClientResponseException(
+                                            clientResponse.statusCode().value(),
+                                            status != null ? status.getReasonPhrase() : "Unknown",
+                                            clientResponse.headers().asHttpHeaders(),
+                                            body != null ? body.getBytes() : null,
+                                            null
+                                    );
+                                });
+                    })
+                    .onStatus(status -> status.is5xxServerError(), clientResponse -> {
+                        log.warn("GitHub API server error {} for branch {}: {}/{}", 
+                                clientResponse.statusCode(), branchName, repositoryDTO.getOwner(), repositoryDTO.getName());
+                        return clientResponse.bodyToMono(String.class)
+                                .map(body -> {
+                                    HttpStatus status = HttpStatus.resolve(clientResponse.statusCode().value());
+                                    return new WebClientResponseException(
+                                            clientResponse.statusCode().value(),
+                                            status != null ? status.getReasonPhrase() : "Unknown",
+                                            clientResponse.headers().asHttpHeaders(),
+                                            body != null ? body.getBytes() : null,
+                                            null
+                                    );
+                                });
+                    })
                     .bodyToMono(Map.class)
                     .timeout(Duration.ofSeconds(10)) // Increased timeout
                     .block();
@@ -227,8 +405,17 @@ public class GitHubService {
                 log.info("Branch '{}' exists for {}/{}", branchName, repositoryDTO.getOwner(), repositoryDTO.getName());
                 return branchName;
             }
+        } catch (WebClientResponseException e) {
+            if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
+                // 404 is expected for non-existent branches, so we don't log it
+                log.debug("Branch '{}' does not exist for {}/{}", branchName, repositoryDTO.getOwner(), repositoryDTO.getName());
+            } else {
+                log.debug("HTTP error checking branch '{}' for {}/{}: {} {}", 
+                        branchName, repositoryDTO.getOwner(), repositoryDTO.getName(), e.getStatusCode(), e.getMessage());
+            }
         } catch (Exception e) {
-            log.debug("Branch '{}' does not exist for {}/{}", branchName, repositoryDTO.getOwner(), repositoryDTO.getName());
+            log.debug("Error checking branch '{}' for {}/{}: {}", 
+                    branchName, repositoryDTO.getOwner(), repositoryDTO.getName(), e.getMessage());
         }
         return null;
     }
@@ -237,7 +424,11 @@ public class GitHubService {
         WebClient.Builder builder = webClientBuilder.baseUrl(githubBaseUrl);
         
         if (token != null && !token.isEmpty()) {
+            // GitHub API v3 uses "token" prefix, v4 uses "Bearer"
             builder.defaultHeader("Authorization", "token " + token);
+        } else {
+            // Add User-Agent header (GitHub API requires it)
+            builder.defaultHeader("User-Agent", "LeakScanner/1.0");
         }
         
         return builder.build();
