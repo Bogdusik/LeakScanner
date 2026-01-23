@@ -42,14 +42,14 @@ A fully functional Chrome extension for scanning GitHub/GitLab repositories for 
 
 ### Prerequisites
 
-- **Docker Desktop** (рекомендуется для быстрого старта)
-- ИЛИ:
+- **Docker Desktop** (recommended for quick start)
+- OR:
   - Node.js 18+ and npm
   - Java 17+
   - Maven 3.9+
   - PostgreSQL 15+
 
-**📖 Подробная инструкция:** См. [INSTALLATION.md](./INSTALLATION.md) для пошаговой установки.
+**📖 Detailed instructions:** See [INSTALLATION.md](./INSTALLATION.md) for step-by-step installation.
 
 ### 1. Clone Repository
 
@@ -118,7 +118,7 @@ DB_PASSWORD=your_secure_password_here
 
 3. For Docker Compose, the `.env` file will be automatically loaded.
 
-**Подробнее:** См. [ENVIRONMENT_SETUP.md](./ENVIRONMENT_SETUP.md) для полной документации по настройке переменных окружения, токенов и безопасности.
+**More details:** See [INSTALLATION.md](./INSTALLATION.md) for full documentation on environment variables, tokens, and security setup.
 
 ### Backend
 
@@ -239,7 +239,7 @@ npm install
 npm run build
 ```
 
-**Подробнее:** См. [TESTING.md](./TESTING.md)
+**More details:** See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for troubleshooting.
 
 ## 📊 API Endpoints
 
@@ -305,9 +305,9 @@ See `aws-lambda/README.md` for Lambda function deployment instructions.
 
 ## 🔧 Troubleshooting
 
-Если у вас возникли проблемы при установке или использовании:
-- 📖 См. [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) для решения частых проблем
-- 📖 См. [INSTALLATION.md](./INSTALLATION.md) для подробной инструкции по установке
+If you encounter any issues during installation or usage:
+- 📖 See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for common problem solutions
+- 📖 See [INSTALLATION.md](./INSTALLATION.md) for detailed installation instructions
 
 ## 🤝 Contributing
 

@@ -1,125 +1,125 @@
-# ✅ Чеклист готовности к production
+# ✅ Production Readiness Checklist
 
-## 📋 Проверка перед публикацией
+## 📋 Pre-release Checklist
 
-### ✅ Документация
+### ✅ Documentation
 
-- [x] README.md с описанием проекта
-- [x] INSTALLATION.md с пошаговой инструкцией
-- [x] TROUBLESHOOTING.md с решением проблем
-- [x] .env.example с примерами переменных окружения
-- [x] Комментарии в коде для сложных мест
+- [x] README.md with project description
+- [x] INSTALLATION.md with step-by-step instructions
+- [x] TROUBLESHOOTING.md with problem solutions
+- [x] .env.example with environment variable examples
+- [x] Code comments for complex parts
 
-### ✅ Безопасность
+### ✅ Security
 
-- [x] Секреты удалены из истории Git
-- [x] .gitignore правильно настроен
-- [x] .env файлы не коммитятся
-- [x] Токены хранятся только в Chrome Storage
-- [x] Валидация входных данных (@Valid, @NotBlank, @Pattern)
-- [x] SQL injection защита через JPA
-- [x] CORS настроен правильно
+- [x] Secrets removed from Git history
+- [x] .gitignore properly configured
+- [x] .env files are not committed
+- [x] Tokens stored only in Chrome Storage
+- [x] Input validation (@Valid, @NotBlank, @Pattern)
+- [x] SQL injection protection via JPA
+- [x] CORS properly configured
 
-### ✅ Функциональность
+### ✅ Functionality
 
-- [x] Сканирование секретов работает
-- [x] Сканирование уязвимостей работает
-- [x] Проверка устаревших зависимостей работает
-- [x] Расчет security score работает
-- [x] История сканирований сохраняется
-- [x] Кеширование результатов работает
-- [x] SSE поток работает корректно
-- [x] Обработка ошибок GitHub/GitLab API
+- [x] Secret scanning works
+- [x] Vulnerability scanning works
+- [x] Outdated dependencies checking works
+- [x] Security score calculation works
+- [x] Scan history is saved
+- [x] Result caching works
+- [x] SSE stream works correctly
+- [x] GitHub/GitLab API error handling
 
-### ✅ Пользовательский опыт
+### ✅ User Experience
 
-- [x] Понятный UI с индикаторами прогресса
-- [x] Понятные сообщения об ошибках
-- [x] Настройки расширения доступны
-- [x] Автоматическое определение репозитория
-- [x] Кеширование результатов для быстрого доступа
-- [x] Валидация URL в настройках
+- [x] Clear UI with progress indicators
+- [x] Clear error messages
+- [x] Extension settings accessible
+- [x] Automatic repository detection
+- [x] Result caching for quick access
+- [x] URL validation in settings
 
-### ✅ Обработка ошибок
+### ✅ Error Handling
 
-- [x] GlobalExceptionHandler для всех ошибок
-- [x] Понятные сообщения об ошибках для пользователей
-- [x] Логирование для отладки
-- [x] Fallback при ошибках (использование кеша)
-- [x] Таймауты для долгих операций
-- [x] Обработка сетевых ошибок
+- [x] GlobalExceptionHandler for all errors
+- [x] Clear error messages for users
+- [x] Logging for debugging
+- [x] Fallback on errors (using cache)
+- [x] Timeouts for long operations
+- [x] Network error handling
 
-### ✅ Тестирование
+### ✅ Testing
 
-- [x] Unit тесты для сервисов (18 тестов, все проходят)
-- [x] Тесты для SecretScannerService
-- [x] Тесты для VulnerabilityScannerService
-- [x] Тесты для ScanService
+- [x] Unit tests for services (18 tests, all passing)
+- [x] Tests for SecretScannerService
+- [x] Tests for VulnerabilityScannerService
+- [x] Tests for ScanService
 
-### ✅ Установка и настройка
+### ✅ Installation and Configuration
 
-- [x] Docker Compose для простой установки
-- [x] .env.example с примерами
-- [x] Инструкции по установке без Docker
-- [x] Инструкции по сборке расширения
-- [x] Проверка работоспособности после установки
+- [x] Docker Compose for easy installation
+- [x] .env.example with examples
+- [x] Installation instructions without Docker
+- [x] Extension build instructions
+- [x] Post-installation verification
 
-### ✅ Производительность
+### ✅ Performance
 
-- [x] Кеширование результатов (1 час)
-- [x] Ограничение размера файлов (10MB)
-- [x] Ограничение количества файлов (30 файлов)
-- [x] Таймауты для API запросов
-- [x] Параллельное выполнение сканирований
+- [x] Result caching (1 hour)
+- [x] File size limit (10MB)
+- [x] File count limit (30 files)
+- [x] Timeouts for API requests
+- [x] Parallel scan execution
 
-### ⚠️ Что нужно улучшить для production
+### ⚠️ Improvements Needed for Production
 
 1. **Rate Limiting**
-   - [ ] Добавить rate limiting на уровне API
-   - [ ] Ограничить количество запросов от одного пользователя
+   - [ ] Add rate limiting at API level
+   - [ ] Limit requests per user
 
-2. **Мониторинг**
-   - [ ] Добавить метрики (Prometheus/Grafana)
-   - [ ] Настроить алерты при ошибках
+2. **Monitoring**
+   - [ ] Add metrics (Prometheus/Grafana)
+   - [ ] Configure error alerts
 
-3. **Логирование**
-   - [ ] Настроить централизованное логирование
-   - [ ] Добавить structured logging
+3. **Logging**
+   - [ ] Set up centralized logging
+   - [ ] Add structured logging
 
-4. **Документация API**
-   - [ ] Добавить Swagger/OpenAPI документацию
-   - [ ] Описать все endpoints
+4. **API Documentation**
+   - [ ] Add Swagger/OpenAPI documentation
+   - [ ] Describe all endpoints
 
-5. **Безопасность**
-   - [ ] Добавить аутентификацию для API (опционально)
-   - [ ] Настроить HTTPS для production
+5. **Security**
+   - [ ] Add API authentication (optional)
+   - [ ] Configure HTTPS for production
 
 6. **Deployment**
-   - [ ] Инструкции по деплою на AWS/другие платформы
+   - [ ] Deployment instructions for AWS/other platforms
    - [ ] CI/CD pipeline
 
-## 🎯 Текущий статус
+## 🎯 Current Status
 
-**Проект готов для использования обычными пользователями!**
+**Project is ready for end users!**
 
-✅ Все основные функции работают
-✅ Документация полная
-✅ Обработка ошибок на месте
-✅ Безопасность обеспечена
-✅ Тесты проходят
+✅ All core features work
+✅ Documentation is complete
+✅ Error handling in place
+✅ Security ensured
+✅ Tests pass
 
-### Что работает из коробки:
+### What Works Out of the Box:
 
-1. ✅ Установка через Docker Compose
-2. ✅ Сканирование публичных репозиториев
-3. ✅ Сканирование приватных репозиториев (с токенами)
-4. ✅ Отображение результатов
-5. ✅ История сканирований
-6. ✅ Кеширование результатов
+1. ✅ Installation via Docker Compose
+2. ✅ Scanning public repositories
+3. ✅ Scanning private repositories (with tokens)
+4. ✅ Results display
+5. ✅ Scan history
+6. ✅ Result caching
 
-### Рекомендации для production:
+### Production Recommendations:
 
-1. Развернуть backend на облачном сервере (AWS, Heroku, etc.)
-2. Настроить HTTPS
-3. Добавить мониторинг
-4. Настроить автоматические бэкапы базы данных
+1. Deploy backend on cloud server (AWS, Heroku, etc.)
+2. Configure HTTPS
+3. Add monitoring
+4. Set up automatic database backups
