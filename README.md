@@ -2,12 +2,6 @@
 
 A Chrome extension that automatically scans GitHub and GitLab repositories for security vulnerabilities, secret leaks, and outdated dependencies. Built to help developers catch security issues before they become problems, with a beautiful ROG Strix-themed UI and comprehensive security scoring.
 
-## Demo
-
-![Extension Popup](screenshots/extension.png)
-![Scan Results](screenshots/scan-results.png)
-![Security Dashboard](screenshots/dashboard.png)
-
 ## Why It's Cool
 
 - **Automated Security Scanning**: Detects API keys, tokens, passwords, and other secrets automatically using pattern matching and regex
