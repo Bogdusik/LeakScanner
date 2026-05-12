@@ -26,22 +26,10 @@ const App: React.FC = () => {
   useEffect(() => {
     loadCurrentRepository();
     checkTokens();
-    autoSetupToken(); // Auto-setup token on first launch
-    
-    // Clear badge when popup opens
-    chrome.action.setBadgeText({ text: '' }).catch(() => {
-      // Ignore errors if badge API is not available
-    });
-  }, []);
 
-  const autoSetupToken = async () => {
-    // Check if token already exists
-    const settings = await chrome.storage.sync.get('githubToken');
-    if (!settings.githubToken) {
-      // Token should be set manually via Settings panel
-      // Auto-setup removed for security
-    }
-  };
+    // Clear badge when popup opens
+    chrome.action.setBadgeText({ text: '' }).catch(() => {});
+  }, []);
 
   const checkTokens = async () => {
     const settings = await chrome.storage.sync.get(['githubToken', 'gitlabToken']);

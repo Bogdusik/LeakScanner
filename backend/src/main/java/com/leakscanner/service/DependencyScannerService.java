@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -124,6 +125,7 @@ public class DependencyScannerService {
                             .build())
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(10))
                     .block();
             
             if (response != null && response.containsKey("response")) {
@@ -192,6 +194,7 @@ public class DependencyScannerService {
                     .uri("/" + packageName + "/json")
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(10))
                     .block();
             
             if (response != null && response.containsKey("info")) {
