@@ -189,7 +189,7 @@ public class SecretScannerService {
                         leak.setFile(file.path());
                         leak.setLine(lineNumber);
                         leak.setSeverity(pattern.severity);
-                        leak.setPattern(line.trim());
+                        leak.setPattern(maskSecretLine(line.trim()));
                         secrets.add(leak);
                     }
                 }
@@ -203,13 +203,18 @@ public class SecretScannerService {
     private boolean isFalsePositive(String content, String filePath) {
         // Skip test files, examples, and documentation
         String lowerPath = filePath.toLowerCase();
-        if (lowerPath.contains("test") || 
-            lowerPath.contains("example") || 
+        String fileName = lowerPath.contains("/")
+                ? lowerPath.substring(lowerPath.lastIndexOf('/') + 1)
+                : lowerPath;
+        if (lowerPath.contains("test") ||
+            lowerPath.contains("example") ||
             lowerPath.contains("sample") ||
             lowerPath.contains("mock") ||
             lowerPath.contains("fixture") ||
-            lowerPath.contains(".md") ||
-            lowerPath.contains("readme")) {
+            fileName.equals("readme.md") ||
+            fileName.startsWith("changelog") ||
+            fileName.startsWith("contributing") ||
+            fileName.startsWith("license")) {
             return true;
         }
         
@@ -262,16 +267,14 @@ public class SecretScannerService {
             }
         }
         
-        // Validate JWT tokens (should have 3 parts separated by dots)
-        if (pattern.name.equals("JWT Token")) {
-            String[] parts = line.split("\\.");
-            if (parts.length != 3) {
-                return false;
-            }
-        }
-        
         return true;
     }
     
+    private String maskSecretLine(String line) {
+        if (line == null || line.length() <= 4) return "***";
+        int keepChars = Math.min(4, line.length());
+        return line.substring(0, keepChars) + "***[REDACTED]";
+    }
+
     private record SecretPattern(String name, Pattern pattern, SecretLeak.Severity severity) {}
 }

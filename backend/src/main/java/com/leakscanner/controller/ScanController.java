@@ -15,14 +15,12 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 @RestController
 @RequestMapping("/api/v1/scan")
 @RequiredArgsConstructor
 @Slf4j
-@CrossOrigin(origins = "*")
 public class ScanController {
     
     private final ScanService scanService;
@@ -124,13 +122,9 @@ public class ScanController {
                 // CRITICAL: Give time for complete event to reach client before closing connection
                 // This prevents "Stream ended without complete event" errors
                 try {
-                    // Flush any pending data and wait to ensure complete event is fully transmitted
-                    // Increased delay to ensure client receives the complete event
-                    Thread.sleep(3000); // 3 seconds delay to ensure event is sent and received
-                    log.debug("Waiting period completed, closing emitter");
+                    Thread.sleep(500);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    log.warn("Interrupted while waiting before closing emitter");
                 }
                 
                 emitter.complete();

@@ -426,16 +426,13 @@ public class GitHubService {
     }
     
     private WebClient createWebClient(String token) {
-        WebClient.Builder builder = webClientBuilder.baseUrl(githubBaseUrl);
-        
+        WebClient.Builder builder = webClientBuilder.baseUrl(githubBaseUrl)
+                .defaultHeader("User-Agent", "LeakScanner/1.0");
+
         if (token != null && !token.isEmpty()) {
-            // GitHub API v3 uses "token" prefix, v4 uses "Bearer"
             builder.defaultHeader("Authorization", "token " + token);
-        } else {
-            // Add User-Agent header (GitHub API requires it)
-            builder.defaultHeader("User-Agent", "LeakScanner/1.0");
         }
-        
+
         return builder.build();
     }
 }

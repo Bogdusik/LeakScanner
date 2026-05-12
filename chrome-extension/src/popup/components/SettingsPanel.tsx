@@ -9,6 +9,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
   const [apiUrl, setApiUrl] = useState('');
   const [githubToken, setGithubToken] = useState('');
   const [gitlabToken, setGitlabToken] = useState('');
+  const [snykToken, setSnykToken] = useState('');
 
   useEffect(() => {
     loadSettings();
@@ -19,23 +20,25 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
       'apiUrl',
       'githubToken',
       'gitlabToken',
+      'snykToken',
     ]);
     setApiUrl(settings.apiUrl || 'http://localhost:8080');
     setGithubToken(settings.githubToken || '');
     setGitlabToken(settings.gitlabToken || '');
+    setSnykToken(settings.snykToken || '');
   };
 
   const handleSave = async () => {
-    // Validate API URL
     if (apiUrl && !apiUrl.match(/^https?:\/\/.+/)) {
       alert('Invalid API URL format. Please use http:// or https://');
       return;
     }
-    
+
     await chrome.storage.sync.set({
       apiUrl: apiUrl || 'http://localhost:8080',
       githubToken,
       gitlabToken,
+      snykToken,
     });
     onClose();
   };
@@ -138,6 +141,35 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ onClose }) => {
           <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
             <span>💡</span>
             <span>Private repos • 2000/hour rate limit</span>
+          </p>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-xs font-semibold text-rog-cyan">
+              Snyk Token <span className="text-gray-500 font-normal">(optional)</span>
+            </label>
+            <button
+              onClick={() => {
+                chrome.tabs.create({ url: 'https://app.snyk.io/account' });
+              }}
+              className="flex items-center gap-1 text-xs text-rog-cyan hover:text-rog-cyanDark font-medium transition-colors"
+            >
+              <Key className="w-3 h-3" />
+              <span>Create</span>
+              <ExternalLink className="w-3 h-3" />
+            </button>
+          </div>
+          <input
+            type="password"
+            value={snykToken}
+            onChange={(e) => setSnykToken(e.target.value)}
+            placeholder="snyk_api_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            className="w-full px-2.5 py-1.5 text-xs border border-rog-cyan/30 rounded-lg focus:ring-2 focus:ring-rog-cyan focus:border-rog-cyan transition-all duration-200 bg-rog-darkGray text-white placeholder-gray-500 rog-glow-cyan"
+          />
+          <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+            <span>💡</span>
+            <span>Enhanced vulnerability scanning via Snyk</span>
           </p>
         </div>
 
