@@ -62,7 +62,7 @@ public class NpmRegistryService {
     
     private String getLatestVersion(String packageName) {
         try {
-            WebClient webClient = webClientBuilder.baseUrl(npmRegistryUrl).build();
+            WebClient webClient = webClientBuilder.clone().baseUrl(npmRegistryUrl).build();
             
             JsonNode response = webClient.get()
                     .uri("/" + packageName + "/latest")

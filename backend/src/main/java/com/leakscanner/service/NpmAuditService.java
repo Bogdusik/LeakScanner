@@ -67,7 +67,7 @@ public class NpmAuditService {
         List<Vulnerability> vulnerabilities = new ArrayList<>();
 
         try {
-            String body = webClientBuilder.baseUrl(npmAuditUrl).build()
+            String body = webClientBuilder.clone().baseUrl(npmAuditUrl).build()
                     .post()
                     .bodyValue(packages)
                     .retrieve()

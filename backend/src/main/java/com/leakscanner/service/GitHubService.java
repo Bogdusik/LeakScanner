@@ -426,7 +426,7 @@ public class GitHubService {
     }
     
     private WebClient createWebClient(String token) {
-        WebClient.Builder builder = webClientBuilder.baseUrl(githubBaseUrl)
+        WebClient.Builder builder = webClientBuilder.clone().baseUrl(githubBaseUrl)
                 .defaultHeader("User-Agent", "LeakScanner/1.0");
 
         if (token != null && !token.isEmpty()) {
