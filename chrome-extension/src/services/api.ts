@@ -1,3 +1,4 @@
+import { parseSseEvent } from './sse';
 import axios from 'axios';
 import { Repository, ScanResult, ScanProgress } from '../types';
 
@@ -120,17 +121,7 @@ export const scanRepositoryStream = async (
                 
                 if (!event.trim()) continue;
                 
-                // Parse SSE format: event: type\ndata: {...}
-                let dataStr = '';
-                let eventType = '';
-                
-                for (const line of event.split('\n')) {
-                  if (line.startsWith('data: ')) {
-                    dataStr = line.substring(6).trim();
-                  } else if (line.startsWith('event: ')) {
-                    eventType = line.substring(7).trim();
-                  }
-                }
+                const { eventType, dataStr } = parseSseEvent(event);
                 
                 if (dataStr) {
                   try {
@@ -236,17 +227,7 @@ export const scanRepositoryStream = async (
                 if (buffer.trim()) {
                   try {
                     // Try to parse remaining buffer as SSE event
-                    const lines = buffer.trim().split('\n');
-                    let lastDataStr = '';
-                    let lastEventType = '';
-                    
-                    for (const line of lines) {
-                      if (line.startsWith('data: ')) {
-                        lastDataStr = line.substring(6).trim();
-                      } else if (line.startsWith('event: ')) {
-                        lastEventType = line.substring(7).trim();
-                      }
-                    }
+                    const { eventType: lastEventType, dataStr: lastDataStr } = parseSseEvent(buffer.trim());
                     
                     if (lastDataStr) {
                       try {
