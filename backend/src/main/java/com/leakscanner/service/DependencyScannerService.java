@@ -114,7 +114,7 @@ public class DependencyScannerService {
     
     private String getMavenLatestVersion(String groupId, String artifactId) {
         try {
-            WebClient webClient = webClientBuilder.baseUrl("https://search.maven.org/solrsearch/select").build();
+            WebClient webClient = webClientBuilder.clone().baseUrl("https://search.maven.org/solrsearch/select").build();
             
             String query = String.format("g:\"%s\" AND a:\"%s\"", groupId, artifactId);
             Map<String, Object> response = webClient.get()
@@ -188,7 +188,7 @@ public class DependencyScannerService {
     
     private String getPyPILatestVersion(String packageName) {
         try {
-            WebClient webClient = webClientBuilder.baseUrl("https://pypi.org/pypi").build();
+            WebClient webClient = webClientBuilder.clone().baseUrl("https://pypi.org/pypi").build();
             
             Map<String, Object> response = webClient.get()
                     .uri("/" + packageName + "/json")

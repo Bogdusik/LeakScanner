@@ -131,7 +131,7 @@ public class GitLabService {
     }
     
     private WebClient createWebClient(String token) {
-        WebClient.Builder builder = webClientBuilder.baseUrl(gitlabBaseUrl);
+        WebClient.Builder builder = webClientBuilder.clone().baseUrl(gitlabBaseUrl);
         
         if (token != null && !token.isEmpty()) {
             builder.defaultHeader("PRIVATE-TOKEN", token);

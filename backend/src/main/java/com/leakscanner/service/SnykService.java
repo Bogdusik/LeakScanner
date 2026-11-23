@@ -34,7 +34,7 @@ public class SnykService {
         }
         
         try {
-            WebClient webClient = webClientBuilder
+            WebClient webClient = webClientBuilder.clone()
                     .baseUrl(snykBaseUrl)
                     .defaultHeader("Authorization", "token " + snykToken)
                     .defaultHeader("Content-Type", "application/json")
