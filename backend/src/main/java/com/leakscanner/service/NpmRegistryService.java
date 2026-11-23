@@ -64,20 +64,19 @@ public class NpmRegistryService {
         try {
             WebClient webClient = webClientBuilder.baseUrl(npmRegistryUrl).build();
             
-            Map<String, Object> response = webClient.get()
-                    .uri("/" + packageName)
+            JsonNode response = webClient.get()
+                    .uri("/" + packageName + "/latest")
                     .retrieve()
-                    .bodyToMono(Map.class)
+                    .bodyToMono(JsonNode.class)
+                    .timeout(java.time.Duration.ofSeconds(15))
                     .block();
-            
-            if (response != null && response.containsKey("dist-tags")) {
-                @SuppressWarnings("unchecked")
-                Map<String, String> distTags = (Map<String, String>) response.get("dist-tags");
-                return distTags.get("latest");
+
+            if (response != null && response.hasNonNull("version")) {
+                return response.get("version").asText();
             }
-            
+
         } catch (Exception e) {
-            log.error("Error getting latest version for package: {}", packageName, e);
+            log.warn("Error getting latest version for package {}: {}", packageName, e.getMessage());
         }
         
         return null;
