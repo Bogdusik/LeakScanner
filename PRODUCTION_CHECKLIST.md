@@ -5,8 +5,6 @@
 ### ✅ Documentation
 
 - [x] README.md with project description
-- [x] INSTALLATION.md with step-by-step instructions
-- [x] TROUBLESHOOTING.md with problem solutions
 - [x] .env.example with environment variable examples
 - [x] Code comments for complex parts
 
